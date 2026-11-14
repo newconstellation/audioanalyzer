@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: swift --version
+      - name: Build
+        run: swift build
+      - name: Test
+        run: swift test
+      - name: Render UI snapshot
+        timeout-minutes: 5
+        run: |
+          swift run RenderSnapshot snapshot.png
+          echo "SNAPSHOT-BASE64-BEGIN"
+          base64 -b 76 -i snapshot.png
+          echo "SNAPSHOT-BASE64-END"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui-snapshot
+          path: snapshot.png
