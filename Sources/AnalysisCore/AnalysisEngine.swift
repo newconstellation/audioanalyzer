@@ -6,11 +6,19 @@ public struct AnalyzerSnapshot: Sendable {
     public var spectrumDB: [Double] = []
     public var spectrumPeakDB: [Double] = []
     public var binWidth: Double = 1
+    /// Fractional-octave bands of the averaged spectrum (and its peak hold), in dBFS.
+    public var octaveBands: [OctaveBand] = []
+    public var octaveDB: [Double] = []
+    public var octavePeakDB: [Double] = []
     public var correlation: Double = 0
     public var balance: Double = 0
     public var sampleRate: Double = 0
     public var transferFunction: TransferFunctionResult?
     public var distortion: DistortionResult?
+    /// Impulse response from the transfer function, and its decay waterfall.
+    public var impulse: ImpulseResponse?
+    public var decay: DecayResult?
+    public var decaySettings = DecaySettings()
     public var scope = ScopeTrace()
     public var scopeSettings = ScopeSettings()
     /// Recent channel 1 / channel 2 sample pairs for the vectorscope.
@@ -50,9 +58,22 @@ public final class AnalysisEngine {
     private var samplesSinceDistortion = 0
     /// How often the distortion analysis is refreshed, in seconds.
     public var distortionInterval = 0.1
+    /// How often the impulse response and decay waterfall are refreshed, in seconds.
+    public var decayInterval = 0.5
+    public var decaySettings = DecaySettings() {
+        didSet { if decaySettings != oldValue { updateDecay() } }
+    }
+    private var samplesSinceDecay = 0
+    private var latestImpulse: ImpulseResponse?
+    private var latestDecay: DecayResult?
 
     // Time-domain instruments and histories.
     public var scopeSettings = ScopeSettings()
+    /// Band width for the octave analysis.
+    public var octaveFraction = OctaveFraction.third {
+        didSet { bands = octaveBands(octaveFraction) }
+    }
+    private var bands = octaveBands(.third)
     public static let waterfallColumns = 400
     /// Seconds between history points.
     public let historyStep = 0.05
@@ -111,7 +132,17 @@ public final class AnalysisEngine {
             samplesSinceDistortion = 0
             latestDistortion = history.withUnsafeBufferPointer { distortionAnalyzer.analyze($0) }
         }
+        samplesSinceDecay += n
+        if transferFunction != nil, Double(samplesSinceDecay) >= decayInterval * sampleRate {
+            samplesSinceDecay = 0
+            updateDecay()
+        }
         updateTimeDomain(channels: channels, frameCount: n)
+    }
+
+    private func updateDecay() {
+        latestImpulse = transferFunction?.impulseResponse()
+        latestDecay = latestImpulse.map { cumulativeSpectralDecay($0, settings: decaySettings) }
     }
 
     private func updateTimeDomain(channels: [UnsafePointer<Float>], frameCount n: Int) {
@@ -150,11 +181,20 @@ public final class AnalysisEngine {
         s.spectrumDB = averager.averageDB
         s.spectrumPeakDB = averager.peakDB
         s.binWidth = analyzer?.binWidth ?? 1
+        if let analyzer {
+            let enbw = analyzer.equivalentNoiseBandwidth
+            s.octaveBands = bands
+            s.octaveDB = bandLevels(spectrumDB: s.spectrumDB, binWidth: s.binWidth, enbwBins: enbw, bands: bands)
+            s.octavePeakDB = bandLevels(spectrumDB: s.spectrumPeakDB, binWidth: s.binWidth, enbwBins: enbw, bands: bands)
+        }
         s.correlation = correlationMeter?.correlation ?? 0
         s.balance = correlationMeter?.balance ?? 0
         s.sampleRate = sampleRate
         s.transferFunction = transferFunction?.result
         s.distortion = latestDistortion
+        s.impulse = latestImpulse
+        s.decay = latestDecay
+        s.decaySettings = decaySettings
         s.scope = captureScope(scopeBuffers, settings: scopeSettings, sampleRate: sampleRate)
         s.scopeSettings = scopeSettings
         let vs = min(2048, scopeBuffers[0].count)
@@ -174,6 +214,8 @@ public final class AnalysisEngine {
         guard let tf = transferFunction, let d = tf.findDelay() else { return nil }
         tf.delayCompensation += Int(d.rounded())
         tf.resetAverages()
+        latestImpulse = nil
+        latestDecay = nil
         return tf.delayCompensation
     }
 

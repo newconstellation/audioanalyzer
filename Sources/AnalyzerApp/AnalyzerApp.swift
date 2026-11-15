@@ -4,6 +4,7 @@ import AnalysisCore
 import AnalyzerUI
 import Observation
 import SwiftUI
+import UniformTypeIdentifiers
 
 @main
 struct AnalyzerMainApp: App {
@@ -18,6 +19,10 @@ struct AnalyzerMainApp: App {
         WindowGroup("Analyzer") {
             AnalyzerView(snapshot: model.snapshot, error: model.error,
                          generator: $model.generator, loopback: $model.loopback,
+                         octaveFraction: $model.octaveFraction, decaySettings: $model.decaySettings,
+                         sourceName: model.sourceName,
+                         fileActions: FileActions(open: { model.openFile() }, liveInput: { model.liveInput() },
+                                                  saveCapture: { model.saveCapture() }),
                          onResetPeaks: model.resetPeaks, onFindDelay: model.findDelay)
                 .frame(minWidth: 900, minHeight: 560)
                 .task { await model.start() }
@@ -40,6 +45,13 @@ final class AnalyzerModel {
     var loopback = false {
         didSet { input.setLoopback(loopback) }
     }
+    var octaveFraction = OctaveFraction.third {
+        didSet { input.setOctaveFraction(octaveFraction) }
+    }
+    var decaySettings = DecaySettings() {
+        didSet { input.setDecaySettings(decaySettings) }
+    }
+    var sourceName = "Input"
     private let input = AudioInput()
 
     @MainActor
@@ -52,6 +64,34 @@ final class AnalyzerModel {
         input.onSnapshot = { [weak self] in self?.snapshot = $0 }
         input.setGenerator(generator)
         do { try input.start() } catch { self.error = error.localizedDescription }
+    }
+
+    @MainActor
+    func openFile() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.audio]
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            sourceName = try input.loadFile(url)
+            error = nil
+        } catch {
+            self.error = "Couldn't open \(url.lastPathComponent): \(error.localizedDescription)"
+        }
+    }
+
+    func liveInput() {
+        input.liveInput()
+        sourceName = "Input"
+    }
+
+    @MainActor
+    func saveCapture() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.wav]
+        panel.nameFieldStringValue = "Capture.wav"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do { try input.saveCapture(to: url) } catch { self.error = error.localizedDescription }
     }
 
     func resetPeaks() { input.resetPeaks() }
