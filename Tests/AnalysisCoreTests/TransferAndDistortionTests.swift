@@ -20,7 +20,7 @@ private func noise(_ n: Int, seed: UInt64, amplitude: Double = 0.3) -> [Float] {
     return (0..<n).map { _ in Float(g.next() * amplitude) }
 }
 
-private func run(_ tf: TransferFunctionAnalyzer, _ x: [Float], _ y: [Float], block: Int = 1024) {
+private func feedTF(_ tf: TransferFunctionAnalyzer, _ x: [Float], _ y: [Float], block: Int = 1024) {
     x.withUnsafeBufferPointer { xp in
         y.withUnsafeBufferPointer { yp in
             var i = 0
@@ -42,7 +42,7 @@ final class TransferFunctionTests: XCTestCase {
     func testIdentityIsFlatZeroPhaseFullCoherence() throws {
         let tf = try XCTUnwrap(TransferFunctionAnalyzer(fftSize: 4096, sampleRate: fs))
         let x = noise(48_000, seed: 1)
-        run(tf, x, x)
+        feedTF(tf, x, x)
         let r = tf.result
         XCTAssertGreaterThan(r.averages, 10)
         for f in [100.0, 1000, 10000] {
@@ -56,7 +56,7 @@ final class TransferFunctionTests: XCTestCase {
     func testGainAndPolarity() throws {
         let tf = try XCTUnwrap(TransferFunctionAnalyzer(fftSize: 4096, sampleRate: fs))
         let x = noise(48_000, seed: 2)
-        run(tf, x, x.map { -0.5 * $0 })
+        feedTF(tf, x, x.map { -0.5 * $0 })
         let r = tf.result
         let i = bin(r, near: 1000)
         XCTAssertEqual(r.magnitudeDB[i], -6.02, accuracy: 0.01)
@@ -70,7 +70,7 @@ final class TransferFunctionTests: XCTestCase {
         let x = noise(96_000, seed: 3)
         var y = [Float](repeating: 0, count: x.count)
         for n in 1..<x.count { y[n] = 0.5 * (x[n] + x[n - 1]) }
-        run(tf, x, y)
+        feedTF(tf, x, y)
         let r = tf.result
         let i = bin(r, near: fs / 4)
         XCTAssertEqual(r.magnitudeDB[i], -3.01, accuracy: 0.05)
@@ -81,7 +81,7 @@ final class TransferFunctionTests: XCTestCase {
         let tf = try XCTUnwrap(TransferFunctionAnalyzer(fftSize: 2048, sampleRate: fs, maxAverages: 400))
         let x = noise(480_000, seed: 4)
         let n = noise(480_000, seed: 5)
-        run(tf, x, zip(x, n).map { $0 + $1 })
+        feedTF(tf, x, zip(x, n).map { $0 + $1 })
         let r = tf.result
         // Equal-power independent noise: coherence 0.5 (averaged over bins).
         let mid = r.coherence[100..<800]
@@ -96,7 +96,7 @@ final class TransferFunctionTests: XCTestCase {
         let d = 96 // 2 ms
         let x = noise(96_000, seed: 6)
         let y = [Float](repeating: 0, count: d) + x.dropLast(d)
-        run(tf, x, y)
+        feedTF(tf, x, y)
         let found = try XCTUnwrap(tf.findDelay())
         XCTAssertEqual(found, Double(d), accuracy: 0.5)
 
@@ -104,7 +104,7 @@ final class TransferFunctionTests: XCTestCase {
         // after it, the channels line up again.
         tf.reset()
         tf.delayCompensation = Int(found.rounded())
-        run(tf, x, y)
+        feedTF(tf, x, y)
         let r = tf.result
         let i = bin(r, near: 5000)
         XCTAssertEqual(r.phaseDegrees[i], 0, accuracy: 0.5)
@@ -118,7 +118,7 @@ final class TransferFunctionTests: XCTestCase {
         let d = 30
         let y = noise(48_000, seed: 7)
         let x = [Float](repeating: 0, count: d) + y.dropLast(d) // source lags response
-        run(tf, x, y)
+        feedTF(tf, x, y)
         XCTAssertEqual(try XCTUnwrap(tf.findDelay()), -Double(d), accuracy: 0.5)
     }
 }
