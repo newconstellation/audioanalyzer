@@ -29,7 +29,7 @@ public struct DecayView: View {
             }
             .font(.system(size: 11))
 
-            Text("Impulse response (source ch 1, response ch 2)").font(.caption).foregroundStyle(.secondary)
+            Text("Impulse response, energy-time (dB; source ch 1, response ch 2)").font(.caption).foregroundStyle(.secondary)
             ImpulsePlot(impulse: impulse, spanMs: settings.rangeMs + settings.windowMs)
                 .frame(height: 110)
             HStack {
@@ -79,7 +79,8 @@ private struct ValueStepper: View {
     }
 }
 
-/// The impulse response, normalised to its peak, from 2 ms before the peak.
+/// The impulse response's envelope in dB relative to its peak (an
+/// energy-time curve), from 2 ms before the peak.
 struct ImpulsePlot: View {
     let impulse: ImpulseResponse?
     let spanMs: Double
@@ -96,29 +97,37 @@ struct ImpulsePlot: View {
                 return
             }
             let peak = ir.peakIndex
-            let scale = Double(max(abs(ir.samples[peak]), 1e-12))
+            let ref = Double(max(abs(ir.samples[peak]), 1e-12))
             let preMs = 2.0
             let totalMs = preMs + spanMs
             let start = peak - Int(preMs / 1000 * ir.sampleRate)
             let count = Int(totalMs / 1000 * ir.sampleRate)
             let columns = max(1, Int(size.width))
+            let floorLevel = -80.0
+            let yOf = { (db: Double) -> Double in Double(size.height) * min(max(db, floorLevel), 0) / floorLevel }
+            var grid = Path()
+            for db in stride(from: -20.0, through: floorLevel, by: -20) {
+                grid.move(to: CGPoint(x: 0, y: yOf(db))); grid.addLine(to: CGPoint(x: size.width, y: yOf(db)))
+                ctx.draw(Text("\(Int(db))").font(.system(size: 8).monospacedDigit()).foregroundStyle(.secondary),
+                         at: CGPoint(x: size.width - 12, y: yOf(db) - 6))
+            }
+            ctx.stroke(grid, with: .color(.white.opacity(0.08)), lineWidth: 0.5)
             var p = Path()
+            p.move(to: CGPoint(x: 0, y: size.height))
             for c in 0..<columns {
                 let a = start + c * count / columns, b = max(a + 1, start + (c + 1) * count / columns)
-                var mn = 0.0, mx = 0.0
-                for i in a..<b where i >= 0 && i < ir.samples.count {
-                    let v = Double(ir.samples[i]) / scale
-                    mn = min(mn, v); mx = max(mx, v)
-                }
-                let x = Double(c)
-                p.move(to: CGPoint(x: x, y: size.height / 2 * (1 - mx)))
-                p.addLine(to: CGPoint(x: x, y: size.height / 2 * (1 - mn) + 0.5))
+                var mx = 0.0
+                for i in a..<b where i >= 0 && i < ir.samples.count { mx = max(mx, abs(Double(ir.samples[i]))) }
+                p.addLine(to: CGPoint(x: Double(c), y: yOf(amplitudeToDB(mx / ref))))
             }
+            p.addLine(to: CGPoint(x: Double(columns), y: size.height))
+            p.closeSubpath()
+            ctx.fill(p, with: .color(.cyan.opacity(0.25)))
             ctx.stroke(p, with: .color(.cyan), lineWidth: 1)
             // Time ticks every 10 or 50 ms from the peak.
             let tick = totalMs > 100 ? 50.0 : (totalMs > 20 ? 10.0 : 2.0)
             var t = 0.0
-            while t <= spanMs {
+            while t <= spanMs - tick / 2 {
                 let x = size.width * (t + preMs) / totalMs
                 ctx.draw(Text(String(format: "%.0f ms", t)).font(.system(size: 9).monospacedDigit()).foregroundStyle(.secondary),
                          at: CGPoint(x: x + 16, y: size.height - 7))
@@ -132,7 +141,8 @@ struct ImpulsePlot: View {
 }
 
 /// Slices drawn back to front, each offset up and to the right, filled so
-/// nearer slices hide farther ones. Colour runs from red (start) to blue (latest).
+/// nearer slices hide farther ones. Colour runs from red (start, at the back)
+/// to blue (latest, at the front).
 struct DecayWaterfall: View {
     let decay: DecayResult?
     var floorDB = -60.0
@@ -164,9 +174,11 @@ struct DecayWaterfall: View {
             }
             ctx.stroke(grid, with: .color(.white.opacity(0.1)), lineWidth: 0.5)
 
-            for k in stride(from: n - 1, through: 0, by: -1) {
+            // Time comes toward the viewer: the first slice is at the back
+            // (up and right), the last at the front, drawn back to front.
+            for k in 0..<n {
                 let frac = n > 1 ? Double(k) / Double(n - 1) : 0
-                let ox = left + depthX * frac, oy = depthY * (1 - frac)
+                let ox = left + depthX * (1 - frac), oy = depthY * frac
                 let row = d.slicesDB[k]
                 var p = Path()
                 p.move(to: CGPoint(x: ox, y: oy + h))
@@ -181,8 +193,10 @@ struct DecayWaterfall: View {
                 ctx.stroke(p, with: .color(color), lineWidth: 1)
             }
             if let last = d.timesMs.last {
+                ctx.draw(Text("0 ms").font(.system(size: 9).monospacedDigit()).foregroundStyle(.secondary),
+                         at: CGPoint(x: left + depthX + w + 4, y: h), anchor: .leading)
                 ctx.draw(Text(String(format: "%.0f ms", last)).font(.system(size: 9).monospacedDigit()).foregroundStyle(.secondary),
-                         at: CGPoint(x: left + depthX + w + 4, y: 8), anchor: .trailing)
+                         at: CGPoint(x: left + w + 4, y: depthY + h), anchor: .leading)
             }
         }
     }
