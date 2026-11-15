@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Phase vs frequency on polar axes: angle is phase (0° up, +90° right),
 /// radius is log frequency (20 Hz at the centre, 20 kHz at the rim). Colour
-/// shows magnitude along the icon ramp (cyan -24 dB, blue 0 dB, violet +24 dB) and opacity shows
+/// shows frequency like every other plot (cyan lows, violet highs) and opacity shows
 /// coherence, so unreliable parts fade out. A system with flat phase stays
 /// on one spoke; delay winds the trace round the circle.
 public struct PolarPhaseView: View {
@@ -47,13 +47,13 @@ public struct PolarPhaseView: View {
             var last: CGPoint?
             for col in columns(frequencies: r.frequencies, width: Double(radius), scale: scale) {
                 let n = Double(col.indices.count)
-                var s = 0.0, co = 0.0, mag = 0.0, coh = 0.0, f = 0.0
+                var s = 0.0, co = 0.0, coh = 0.0, f = 0.0
                 for i in col.indices {
                     s += sin(r.phaseDegrees[i] * .pi / 180); co += cos(r.phaseDegrees[i] * .pi / 180)
-                    mag += r.magnitudeDB[i]; coh += r.coherence[i]; f += r.frequencies[i]
+                    coh += r.coherence[i]; f += r.frequencies[i]
                 }
                 let pt = point(f / n, atan2(s, co) * 180 / .pi)
-                let color = Theme.ramp((mag / n + 24) / 48).opacity(0.15 + 0.85 * min(max(coh / n, 0), 1))
+                let color = Theme.ramp(scale.x(f / n, width: 1)).opacity(0.15 + 0.85 * min(max(coh / n, 0), 1))
                 if let last {
                     var seg = Path()
                     seg.move(to: last); seg.addLine(to: pt)

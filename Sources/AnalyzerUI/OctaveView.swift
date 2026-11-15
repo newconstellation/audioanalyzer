@@ -45,9 +45,8 @@ public struct OctaveView: View {
                             holds.addRect(CGRect(x: x0 + gap, y: py - 1, width: max(0.5, x1 - x0 - 2 * gap), height: 2))
                         }
                     }
-                    // Lit along the icon ramp by level: cyan low, violet high.
-                    ctx.fill(bars, with: .linearGradient(Gradient(colors: [Theme.rampHigh, Theme.rampMid, Theme.rampLow.opacity(0.75)]),
-                                                         startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
+                    // Each band in its frequency colour: cyan lows to violet highs.
+                    ctx.fill(bars, with: Theme.frequencyShading(width: size.width))
                     ctx.fill(holds, with: .color(Theme.text.opacity(0.9)))
                     // Band values under the bars when there's room.
                     if n <= 31 {

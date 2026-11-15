@@ -135,7 +135,7 @@ public struct TransferFunctionView: View {
                 SectionLabel("Phase · polar")
                 PolarPhaseView(result: result)
                     .aspectRatio(1, contentMode: .fit)
-                Text("Angle: phase. Radius: 20 Hz (centre) to 20 kHz. Colour: magnitude, low cyan to high violet. Faint: low coherence.")
+                Text("Angle: phase. Radius: 20 Hz (centre) to 20 kHz. Colour: frequency. Faint: low coherence.")
                     .font(.system(size: 9)).foregroundStyle(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -165,16 +165,16 @@ public struct TransferFunctionView: View {
                 Canvas { ctx, size in
                     guard let r = result, !r.frequencies.isEmpty else { return }
                     for m in perMic where !m.frequencies.isEmpty {
-                        drawTrace(ctx, size: size, r: m, values: m.magnitudeDB, x: x, y: y, color: Theme.text.opacity(0.3), circular: false)
+                        drawTrace(ctx, size: size, r: m, values: m.magnitudeDB, x: x, y: y, shading: .color(Theme.text.opacity(0.3)), circular: false)
                     }
-                    fillUnder(ctx, size: size, r: r, values: r.magnitudeDB, y: y, color: Theme.signal)
-                    drawTrace(ctx, size: size, r: r, values: r.magnitudeDB, x: x, y: y, color: Theme.signal, circular: false)
+                    fillUnder(ctx, size: size, r: r, values: r.magnitudeDB, y: y)
+                    drawTrace(ctx, size: size, r: r, values: r.magnitudeDB, x: x, y: y, shading: Theme.frequencyShading(width: size.width), circular: false)
                 }
             }
             FrequencyPlot(yTicks: Self.phaseTicks.map { (value: $0.0, label: $0.1) }, yRange: -180...180, title: "Phase") { x, y in
                 Canvas { ctx, size in
                     guard let r = result, !r.frequencies.isEmpty else { return }
-                    drawTrace(ctx, size: size, r: r, values: r.phaseDegrees, x: x, y: y, color: Theme.signal2, circular: true)
+                    drawTrace(ctx, size: size, r: r, values: r.phaseDegrees, x: x, y: y, shading: Theme.frequencyShading(width: size.width), circular: true)
                 }
             }
             FrequencyPlot(yTicks: [(1, "1.0"), (0.5, "0.5"), (0, "0")], yRange: 0...1, title: "Coherence") { x, y in
@@ -190,9 +190,8 @@ public struct TransferFunctionView: View {
                     let edge = p
                     p.addLine(to: CGPoint(x: size.width, y: size.height))
                     p.closeSubpath()
-                    ctx.fill(p, with: .linearGradient(Gradient(colors: [Theme.signal.opacity(0.35), Theme.signal.opacity(0.06)]),
-                                                      startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
-                    ctx.stroke(edge, with: .color(Theme.signal.opacity(0.8)), lineWidth: 1)
+                    ctx.fill(p, with: Theme.frequencyShading(width: size.width, opacity: 0.22))
+                    ctx.stroke(edge, with: Theme.frequencyShading(width: size.width, opacity: 0.9), lineWidth: 1)
                 }
             }
             .frame(height: 64)
@@ -202,7 +201,7 @@ public struct TransferFunctionView: View {
     /// One point per pixel column, averaged over the bins in it. Columns with
     /// low coherence are drawn faint, since their values are unreliable.
     private func drawTrace(_ ctx: GraphicsContext, size: CGSize, r: TransferFunctionResult, values: [Double],
-                           x: (Double, Double) -> Double, y: (Double, Double) -> Double, color: Color, circular: Bool) {
+                           x: (Double, Double) -> Double, y: (Double, Double) -> Double, shading: GraphicsContext.Shading, circular: Bool) {
         let scale = LogFrequencyScale()
         var strong = Path(), weak = Path()
         var last: (CGPoint, Bool)?
@@ -232,13 +231,15 @@ public struct TransferFunctionView: View {
             }
             last = (pt, good)
         }
-        ctx.stroke(weak, with: .color(color.opacity(0.25)), lineWidth: 1)
-        ctx.stroke(strong, with: .color(color), style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
+        var faint = ctx
+        faint.opacity = 0.25
+        faint.stroke(weak, with: shading, lineWidth: 1)
+        ctx.stroke(strong, with: shading, style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
     }
 
     /// A soft fill from the trace down to the bottom of the plot.
     private func fillUnder(_ ctx: GraphicsContext, size: CGSize, r: TransferFunctionResult, values: [Double],
-                           y: (Double, Double) -> Double, color: Color) {
+                           y: (Double, Double) -> Double) {
         var p = Path(), started = false
         for c in columns(frequencies: r.frequencies, width: size.width, scale: LogFrequencyScale()) {
             let v = c.indices.map { values[$0] }.reduce(0, +) / Double(c.indices.count)
@@ -248,8 +249,7 @@ public struct TransferFunctionView: View {
         guard started, let last = p.currentPoint else { return }
         p.addLine(to: CGPoint(x: last.x, y: size.height))
         p.closeSubpath()
-        ctx.fill(p, with: .linearGradient(Gradient(colors: [color.opacity(0.22), color.opacity(0)]),
-                                          startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
+        ctx.fill(p, with: Theme.frequencyShading(width: size.width, opacity: 0.16))
     }
 }
 
@@ -295,7 +295,7 @@ public struct DistortionView: View {
                                 let pt = CGPoint(x: c.x, y: y(v, size.height))
                                 if started { p.addLine(to: pt) } else { p.move(to: pt); started = true }
                             }
-                            ctx.stroke(p, with: .color(Theme.signal), lineWidth: 1)
+                            ctx.stroke(p, with: Theme.frequencyShading(width: size.width), lineWidth: 1)
                             // Mark the fundamental and harmonics.
                             for h in 1...(r.harmonicsDBc.count + 1) {
                                 let f = r.fundamentalHz * Double(h)
@@ -349,7 +349,7 @@ struct HarmonicBars: View {
                     let cx = Double(i) * slot + slot / 2
                     let h = plotH * max(0, min(1, (db + 160) / 160))
                     ctx.fill(Path(roundedRect: CGRect(x: cx - slot * 0.3, y: plotH - h, width: slot * 0.6, height: h), cornerRadius: 2),
-                             with: .linearGradient(Theme.rampGradient, startPoint: CGPoint(x: 0, y: plotH), endPoint: CGPoint(x: 0, y: 0)))
+                             with: Theme.frequencyShading(width: size.width))
                     ctx.draw(Text(String(format: "%.0f", db)).font(Theme.axis).foregroundStyle(Theme.text),
                              at: CGPoint(x: cx, y: max(6, plotH - h - 7)))
                     ctx.draw(Text("H\(i + 2)").font(Theme.label).foregroundStyle(Theme.textSecondary),

@@ -143,8 +143,8 @@ struct ImpulsePlot: View {
 }
 
 /// Slices drawn back to front, each offset up and to the right, filled so
-/// nearer slices hide farther ones. Colour runs along the icon ramp, from
-/// cyan (start, at the back) to violet (latest, at the front).
+/// nearer slices hide farther ones. Colour shows frequency (cyan lows to
+/// violet highs); older slices, further back, are dimmer.
 struct DecayWaterfall: View {
     let decay: DecayResult?
     var floorDB = -60.0
@@ -189,10 +189,17 @@ struct DecayWaterfall: View {
                 }
                 p.addLine(to: CGPoint(x: ox + w, y: oy + h))
                 p.closeSubpath()
-                let color = Theme.ramp(frac)
+                // Coloured by frequency like every other frequency plot; older
+                // slices (further back) are dimmer.
+                let hue = GraphicsContext.Shading.linearGradient(Theme.rampGradient, startPoint: CGPoint(x: ox, y: 0),
+                                                                 endPoint: CGPoint(x: ox + w, y: 0))
                 ctx.fill(p, with: .color(Theme.panel))
-                ctx.fill(p, with: .color(color.opacity(0.18)))
-                ctx.stroke(p, with: .color(color), lineWidth: 1)
+                var tinted = ctx
+                tinted.opacity = 0.12
+                tinted.fill(p, with: hue)
+                var edge = ctx
+                edge.opacity = 0.45 + 0.55 * frac
+                edge.stroke(p, with: hue, lineWidth: 1)
             }
             if let last = d.timesMs.last {
                 ctx.draw(Text("0 ms").font(Theme.axis).foregroundStyle(Theme.textSecondary),

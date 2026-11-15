@@ -1,28 +1,33 @@
 import SwiftUI
 
-/// The app's visual language ("Signal Path"): ink-navy neutrals, and the app
-/// icon's cyan → blue → violet ramp as the one colour language for level and
-/// data. Every view takes its colours, type and shapes from here.
+/// The app's visual language: near-black neutrals with a violet tint, and the
+/// app icon's cyan → blue → violet ramp as the one colour language for data.
+/// Every view takes its colours, type and shapes from here.
 ///
 /// Colour meanings, kept the same on every page:
-/// - `signal` (cyan): the primary measurement trace.
-/// - `signal2` (violet): the second trace (phase, RMS, peak hold).
-/// - `ramp`: level and magnitude, low (cyan) to high (violet).
+/// - Frequency hue: on any frequency axis a trace is coloured by frequency,
+///   lows cyan through mids blue to highs violet (`frequencyShading`), so a
+///   band has the same colour on every page.
+/// - `signal` (cyan) / `signal2` (violet): traces with no frequency axis.
+/// - `ramp`: level, low (cyan) to high (violet).
+/// - `good` (green): live input running.
 /// - `warning` (amber): uncalibrated, near clipping.
 /// - `danger` (red): clipping and overs only.
 public enum Theme {
-    // MARK: Neutrals (navy-tinted)
-    static let background = Color(hex: 0x0A0D16)
-    static let panel = Color(hex: 0x0F1320)
-    static let raised = Color(hex: 0x161C2E)
-    static let hairline = Color(hex: 0x1F2638)
-    static let raisedEdge = Color(hex: 0x2A3352)
-    static let grid = Color(hex: 0x26304C)
-    static let well = Color(hex: 0x1A2033)
+    // MARK: Neutrals (near-black, violet-tinted)
+    /// The instrument rail and meter bridge, a step darker than the content.
+    static let chrome = Color(hex: 0x060509)
+    static let background = Color(hex: 0x09080F)
+    static let panel = Color(hex: 0x0F0D18)
+    static let raised = Color(hex: 0x171422)
+    static let hairline = Color(hex: 0x1E1B2C)
+    static let raisedEdge = Color(hex: 0x2C2842)
+    static let grid = Color(hex: 0x272339)
+    static let well = Color(hex: 0x191626)
 
-    static let text = Color(hex: 0xE6EAF5)
-    static let textSecondary = Color(hex: 0x8A93AD)
-    static let textTertiary = Color(hex: 0x5F6883)
+    static let text = Color(hex: 0xEBE8F5)
+    static let textSecondary = Color(hex: 0x8C87A6)
+    static let textTertiary = Color(hex: 0x5D5878)
 
     // MARK: Data and state
     static let signal = Color(hex: 0x3FD8FF)
@@ -40,6 +45,13 @@ public enum Theme {
 
     /// The icon ramp as a gradient (low → high).
     static let rampGradient = Gradient(colors: [rampLow, rampMid, rampHigh])
+
+    /// A trace or fill coloured by frequency across a plot `width` wide whose
+    /// x axis is log frequency: cyan lows, blue mids, violet highs.
+    static func frequencyShading(width: CGFloat, opacity: Double = 1) -> GraphicsContext.Shading {
+        .linearGradient(Gradient(colors: [rampLow.opacity(opacity), rampMid.opacity(opacity), rampHigh.opacity(opacity)]),
+                        startPoint: .zero, endPoint: CGPoint(x: width, y: 0))
+    }
 
     /// The icon ramp at `t` (0...1).
     static func ramp(_ t: Double) -> Color {
