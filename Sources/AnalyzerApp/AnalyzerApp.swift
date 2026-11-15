@@ -16,8 +16,9 @@ struct AnalyzerMainApp: App {
 
     var body: some Scene {
         WindowGroup("Analyzer") {
-            AnalyzerView(snapshot: model.snapshot, error: model.error, onResetPeaks: model.resetPeaks)
-                .frame(minWidth: 760, minHeight: 420)
+            AnalyzerView(snapshot: model.snapshot, error: model.error,
+                         onResetPeaks: model.resetPeaks, onFindDelay: model.findDelay)
+                .frame(minWidth: 900, minHeight: 560)
                 .task { await model.start() }
         }
     }
@@ -41,4 +42,5 @@ final class AnalyzerModel {
     }
 
     func resetPeaks() { input.resetPeaks() }
+    func findDelay() { input.findDelay() }
 }

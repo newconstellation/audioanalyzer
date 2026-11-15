@@ -46,8 +46,13 @@ public final class SpectrumAnalyzer {
     public var binWidth: Double { sampleRate / Double(fftSize) }
     public func frequency(ofBin bin: Int) -> Double { Double(bin) * binWidth }
 
-    /// Linear magnitudes (1.0 = full-scale sine) for the last `fftSize` samples.
-    public func magnitudes(_ samples: UnsafeBufferPointer<Float>) -> [Float] {
+    /// Equivalent noise bandwidth of the window, in bins.
+    public private(set) lazy var equivalentNoiseBandwidth: Double = window.equivalentNoiseBandwidth(count: fftSize)
+
+    /// Complex spectrum, bins DC through Nyquist, on the same scale as
+    /// `magnitudes` (a full-scale sine has magnitude 1). Phase follows the
+    /// usual e^(-j omega n) convention. Uses the last `fftSize` samples.
+    public func complexSpectrum(_ samples: UnsafeBufferPointer<Float>) -> (re: [Float], im: [Float]) {
         precondition(samples.count >= fftSize, "need at least fftSize samples")
         let start = samples.count - fftSize
         let input = UnsafeBufferPointer(rebasing: samples[start...])
@@ -59,15 +64,23 @@ public final class SpectrumAnalyzer {
         }
         dft.transform(inputReal: evens, inputImaginary: odds,
                       outputReal: &outReal, outputImaginary: &outImag)
-        var mags = [Float](repeating: 0, count: half + 1)
+        var re = [Float](repeating: 0, count: half + 1)
+        var im = [Float](repeating: 0, count: half + 1)
         // Packed format: real[0] = DC, imag[0] = Nyquist. Those two bins are
         // not doubled like the others, so halve them to keep one scale.
-        mags[0] = abs(outReal[0]) * scale / 2
-        mags[half] = abs(outImag[0]) * scale / 2
+        re[0] = outReal[0] * scale / 2
+        re[half] = outImag[0] * scale / 2
         for k in 1..<half {
-            mags[k] = (outReal[k] * outReal[k] + outImag[k] * outImag[k]).squareRoot() * scale
+            re[k] = outReal[k] * scale
+            im[k] = outImag[k] * scale
         }
-        return mags
+        return (re, im)
+    }
+
+    /// Linear magnitudes (1.0 = full-scale sine) for the last `fftSize` samples.
+    public func magnitudes(_ samples: UnsafeBufferPointer<Float>) -> [Float] {
+        let (re, im) = complexSpectrum(samples)
+        return zip(re, im).map { ($0 * $0 + $1 * $1).squareRoot() }
     }
 
     /// Magnitudes in dBFS.

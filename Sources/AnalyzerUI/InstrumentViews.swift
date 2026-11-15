@@ -55,23 +55,14 @@ struct SpectrumView: View {
     private let topDB = 0.0, bottomDB = -120.0
 
     var body: some View {
-        Canvas { ctx, size in
-            ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.gray.opacity(0.1)))
-            let maxF = max(sampleRate / 2, 1000)
-            func x(_ f: Double) -> Double { size.width * log(f / minF) / log(maxF / minF) }
-            func y(_ db: Double) -> Double { size.height * (topDB - max(db, bottomDB)) / (topDB - bottomDB) }
-
-            var grid = Path()
-            for f in [50.0, 100, 200, 500, 1000, 2000, 5000, 10000, 20000] where f < maxF {
-                grid.move(to: CGPoint(x: x(f), y: 0)); grid.addLine(to: CGPoint(x: x(f), y: size.height))
+        FrequencyPlot(yTicks: stride(from: 0.0, through: bottomDB, by: -20).map { (value: $0, label: "\(Int($0))") },
+                      yRange: bottomDB...topDB) { x, y in
+            Canvas { ctx, size in
+                let xs: (Double) -> Double = { x($0, size.width) }
+                let ys: (Double) -> Double = { y($0, size.height) }
+                ctx.stroke(trace(peakDB, x: xs, y: ys), with: .color(.yellow.opacity(0.6)), lineWidth: 1)
+                ctx.stroke(trace(averageDB, x: xs, y: ys), with: .color(.cyan), lineWidth: 1.5)
             }
-            for db in stride(from: -20.0, to: bottomDB, by: -20) {
-                grid.move(to: CGPoint(x: 0, y: y(db))); grid.addLine(to: CGPoint(x: size.width, y: y(db)))
-            }
-            ctx.stroke(grid, with: .color(.white.opacity(0.12)), lineWidth: 0.5)
-
-            ctx.stroke(trace(peakDB, x: x, y: y), with: .color(.yellow.opacity(0.6)), lineWidth: 1)
-            ctx.stroke(trace(averageDB, x: x, y: y), with: .color(.cyan), lineWidth: 1.5)
         }
     }
 
@@ -82,7 +73,7 @@ struct SpectrumView: View {
         var column = -1.0, colMax = -Double.infinity, started = false
         for k in 1..<db.count {
             let f = Double(k) * binWidth
-            guard f >= minF else { continue }
+            guard f >= minF, f <= 20000 else { continue }
             let cx = x(f).rounded()
             if cx != column, colMax > -.infinity {
                 let pt = CGPoint(x: column, y: y(colMax))

@@ -45,6 +45,12 @@ final class AudioInput {
         }
     }
 
+    func findDelay() {
+        lock.lock()
+        engine?.findAndApplyDelay()
+        lock.unlock()
+    }
+
     func resetPeaks() {
         lock.lock()
         engine?.resetPeaks()
