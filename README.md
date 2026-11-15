@@ -33,4 +33,16 @@ swift run RenderSnapshot out_dir
 ```
 
 Running from Terminal, macOS asks for microphone access for Terminal the
-first time. Choose the input device in System Settings > Sound > Input.
+first time. Choose the input device on the Inputs page.
+
+## App bundle
+
+```sh
+tools/package/package-app.sh dist 0.1.0
+```
+
+builds `dist/Audio Analyzer.app` (universal: Apple Silicon and Intel, macOS 14+) and a zip of it.
+CI does the same on every push and pull request and uploads the zip as the
+`AudioAnalyzer-app` artifact. The app is ad-hoc signed, not notarized: the
+first time, right-click it and choose Open (or run
+`xattr -dr com.apple.quarantine "Audio Analyzer.app"`).
