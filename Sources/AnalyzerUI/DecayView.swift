@@ -27,17 +27,17 @@ public struct DecayView: View {
                         unit: "", steps: [0, 48, 24, 12, 6, 3], label: { $0 == 0 ? "off" : "1/\(Int($0))" })
                 Spacer()
             }
-            .font(.system(size: 11))
+            .font(Theme.small)
 
-            Text("Impulse response, energy-time (dB; source ch 1, response ch 2)").font(.caption).foregroundStyle(.secondary)
+            Text("Impulse response, energy-time (dB; source ch 1, response ch 2)").font(Theme.small).foregroundStyle(Theme.textSecondary)
             ImpulsePlot(impulse: impulse, spanMs: settings.rangeMs + settings.windowMs)
                 .frame(height: 110)
             HStack {
-                Text("Cumulative spectral decay (dB)").font(.caption).foregroundStyle(.secondary)
+                SectionLabel("Cumulative spectral decay (dB)")
                 Spacer()
                 if let d = decay, let last = d.timesMs.last {
                     Text(String(format: "%d slices, 0 to %.0f ms", d.timesMs.count, last))
-                        .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                        .font(Theme.readout(10)).foregroundStyle(Theme.textSecondary)
                 }
             }
             DecayWaterfall(decay: decay)
@@ -57,7 +57,7 @@ private struct ValueStepper: View {
 
     var body: some View {
         HStack(spacing: 3) {
-            Text(title).foregroundStyle(.secondary)
+            Text(title).foregroundStyle(Theme.textSecondary)
             button("−") { step(-1) }
             Text(label(value) + (unit.isEmpty ? "" : " \(unit)"))
                 .monospacedDigit()
@@ -69,7 +69,8 @@ private struct ValueStepper: View {
     private func button(_ t: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(t).frame(width: 16, height: 16)
-                .background(RoundedRectangle(cornerRadius: 3).fill(Color.white.opacity(0.12)))
+                .background(RoundedRectangle(cornerRadius: 3).fill(Theme.raised))
+                .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(Theme.raisedEdge, lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
@@ -88,13 +89,13 @@ struct ImpulsePlot: View {
 
     var body: some View {
         Canvas { ctx, size in
-            ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.gray.opacity(0.1)))
+            ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Theme.panel))
             var mid = Path()
             mid.move(to: CGPoint(x: 0, y: size.height / 2)); mid.addLine(to: CGPoint(x: size.width, y: size.height / 2))
-            ctx.stroke(mid, with: .color(.white.opacity(0.15)), lineWidth: 0.5)
+            ctx.stroke(mid, with: .color(Theme.grid.opacity(0.8)), lineWidth: 0.5)
             guard let ir = impulse, ir.samples.count > 1, ir.sampleRate > 0 else {
                 ctx.draw(Text("Measure a transfer function (ch 1 source, ch 2 response) to see its impulse response.")
-                    .font(.caption).foregroundStyle(.secondary), at: CGPoint(x: size.width / 2, y: size.height / 2))
+                    .font(Theme.small).foregroundStyle(Theme.textSecondary), at: CGPoint(x: size.width / 2, y: size.height / 2))
                 return
             }
             let peak = ir.peakIndex
@@ -109,10 +110,10 @@ struct ImpulsePlot: View {
             var grid = Path()
             for db in stride(from: -20.0, through: floorLevel, by: -20) {
                 grid.move(to: CGPoint(x: 0, y: yOf(db))); grid.addLine(to: CGPoint(x: size.width, y: yOf(db)))
-                ctx.draw(Text("\(Int(db))").font(.system(size: 8).monospacedDigit()).foregroundStyle(.secondary),
+                ctx.draw(Text("\(Int(db))").font(Theme.axis).foregroundStyle(Theme.textSecondary),
                          at: CGPoint(x: size.width - 12, y: yOf(db) - 6))
             }
-            ctx.stroke(grid, with: .color(.white.opacity(0.08)), lineWidth: 0.5)
+            ctx.stroke(grid, with: .color(Theme.grid.opacity(0.8)), lineWidth: 0.5)
             var p = Path()
             p.move(to: CGPoint(x: 0, y: size.height))
             for c in 0..<columns {
@@ -123,18 +124,18 @@ struct ImpulsePlot: View {
             }
             p.addLine(to: CGPoint(x: Double(columns), y: size.height))
             p.closeSubpath()
-            ctx.fill(p, with: .color(.cyan.opacity(0.25)))
-            ctx.stroke(p, with: .color(.cyan), lineWidth: 1)
+            ctx.fill(p, with: .color(Theme.signal.opacity(0.22)))
+            ctx.stroke(p, with: .color(Theme.signal), lineWidth: 1.2)
             // Time ticks every 10 or 50 ms from the peak.
             let tick = totalMs > 100 ? 50.0 : (totalMs > 20 ? 10.0 : 2.0)
             var t = 0.0
             while t <= spanMs - tick / 2 {
                 let x = size.width * (t + preMs) / totalMs
-                ctx.draw(Text(String(format: "%.0f ms", t)).font(.system(size: 9).monospacedDigit()).foregroundStyle(.secondary),
+                ctx.draw(Text(String(format: "%.0f ms", t)).font(Theme.axis).foregroundStyle(Theme.textSecondary),
                          at: CGPoint(x: x + 16, y: size.height - 7))
                 var g = Path()
                 g.move(to: CGPoint(x: x, y: 0)); g.addLine(to: CGPoint(x: x, y: size.height))
-                ctx.stroke(g, with: .color(.white.opacity(0.1)), lineWidth: 0.5)
+                ctx.stroke(g, with: .color(Theme.grid.opacity(0.8)), lineWidth: 0.5)
                 t += tick
             }
         }
@@ -142,15 +143,15 @@ struct ImpulsePlot: View {
 }
 
 /// Slices drawn back to front, each offset up and to the right, filled so
-/// nearer slices hide farther ones. Colour runs from red (start, at the back)
-/// to blue (latest, at the front).
+/// nearer slices hide farther ones. Colour runs along the icon ramp, from
+/// cyan (start, at the back) to violet (latest, at the front).
 struct DecayWaterfall: View {
     let decay: DecayResult?
     var floorDB = -60.0
 
     var body: some View {
         Canvas { ctx, size in
-            ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.gray.opacity(0.06)))
+            ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Theme.panel))
             guard let d = decay, let first = d.slicesDB.first, first.count > 1 else { return }
             let left = 36.0, bottom = 18.0
             let n = d.slicesDB.count
@@ -164,16 +165,16 @@ struct DecayWaterfall: View {
             for db in stride(from: 0.0, through: floorDB, by: -10) {
                 let yy = depthY + y(db)
                 grid.move(to: CGPoint(x: left, y: yy)); grid.addLine(to: CGPoint(x: left + w, y: yy))
-                ctx.draw(Text(String(format: "%.0f", db)).font(.system(size: 9).monospacedDigit()).foregroundStyle(.secondary),
+                ctx.draw(Text(String(format: "%.0f", db)).font(Theme.axis).foregroundStyle(Theme.textSecondary),
                          at: CGPoint(x: left - 14, y: yy))
             }
             for f in LogFrequencyScale.gridFrequencies where f >= d.minFrequency && f <= d.maxFrequency {
                 let xx = left + scale.x(f, width: w)
                 grid.move(to: CGPoint(x: xx, y: depthY)); grid.addLine(to: CGPoint(x: xx, y: depthY + h))
-                ctx.draw(Text(LogFrequencyScale.label(f)).font(.system(size: 9).monospacedDigit()).foregroundStyle(.secondary),
+                ctx.draw(Text(LogFrequencyScale.label(f)).font(Theme.axis).foregroundStyle(Theme.textSecondary),
                          at: CGPoint(x: xx, y: size.height - bottom / 2))
             }
-            ctx.stroke(grid, with: .color(.white.opacity(0.1)), lineWidth: 0.5)
+            ctx.stroke(grid, with: .color(Theme.grid.opacity(0.8)), lineWidth: 0.5)
 
             // Time comes toward the viewer: the first slice is at the back
             // (up and right), the last at the front, drawn back to front.
@@ -188,15 +189,15 @@ struct DecayWaterfall: View {
                 }
                 p.addLine(to: CGPoint(x: ox + w, y: oy + h))
                 p.closeSubpath()
-                let color = Color(hue: 0.66 * frac, saturation: 0.85, brightness: 0.95)
-                ctx.fill(p, with: .color(Color(white: 0.06)))
+                let color = Theme.ramp(frac)
+                ctx.fill(p, with: .color(Theme.panel))
                 ctx.fill(p, with: .color(color.opacity(0.18)))
                 ctx.stroke(p, with: .color(color), lineWidth: 1)
             }
             if let last = d.timesMs.last {
-                ctx.draw(Text("0 ms").font(.system(size: 9).monospacedDigit()).foregroundStyle(.secondary),
+                ctx.draw(Text("0 ms").font(Theme.axis).foregroundStyle(Theme.textSecondary),
                          at: CGPoint(x: left + depthX + w - 2, y: h + 8), anchor: .trailing)
-                ctx.draw(Text(String(format: "%.0f ms", last)).font(.system(size: 9).monospacedDigit()).foregroundStyle(.secondary),
+                ctx.draw(Text(String(format: "%.0f ms", last)).font(Theme.axis).foregroundStyle(Theme.textSecondary),
                          at: CGPoint(x: left + w + 4, y: depthY + h), anchor: .leading)
             }
         }

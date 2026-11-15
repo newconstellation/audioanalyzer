@@ -27,7 +27,7 @@ public struct GeneratorView: View {
                                 Text("On"); Text("Frequency (Hz)"); Text("Level (dBFS)"); Text("")
                                 Text("Sweep to (Hz)"); Text("Seconds"); Text("Log")
                             }
-                            .font(.caption).foregroundStyle(.secondary)
+                            .font(Theme.small).foregroundStyle(Theme.textSecondary)
                         }
                         ForEach(settings.tones.indices, id: \.self) { i in
                             toneRow($settings.tones[i])
@@ -107,12 +107,11 @@ public struct GeneratorView: View {
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.headline)
+            Text(title).font(.system(size: 13, weight: .semibold))
             content()
         }
-        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.05)))
+        .panel(padding: 12)
     }
 }
 
@@ -139,7 +138,7 @@ private struct NumberField: View {
     @Binding var value: Double
     var body: some View {
         HStack(spacing: 4) {
-            Text(title).foregroundStyle(.secondary)
+            Text(title).foregroundStyle(Theme.textSecondary)
             TextField(title, value: $value, format: .number).frame(width: 70)
         }
     }

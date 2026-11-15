@@ -68,7 +68,7 @@ public struct AnalyzerView: View {
             .fixedSize(horizontal: false, vertical: true)
             .layoutPriority(1)
             if let error {
-                Text(error).foregroundStyle(.red)
+                Text(error).font(Theme.body).foregroundStyle(Theme.danger)
             }
             HStack(alignment: .top, spacing: 16) {
                 LevelMetersView(levels: snapshot.levels)
@@ -125,9 +125,12 @@ public struct AnalyzerView: View {
             // stay on screen however much a page holds.
             .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .top)
             .clipped()
-            HStack {
-                Text(snapshot.sampleRate > 0 ? "\(sourceName), \(Int(snapshot.sampleRate)) Hz" : "No input")
-                    .foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                Circle().fill(snapshot.sampleRate > 0 ? Theme.good : Theme.textTertiary).frame(width: 7, height: 7)
+                Text(snapshot.sampleRate > 0 ? "\(sourceName == "Input" ? "Live input" : sourceName) · \(Int(snapshot.sampleRate)) Hz" : "No input")
+                    .font(Theme.small)
+                    .foregroundStyle(Theme.textSecondary)
+                    .lineLimit(1)
                 Spacer()
                 if let fileActions {
                     PlainButton(title: "Open audio file…", action: fileActions.open)
@@ -139,12 +142,16 @@ public struct AnalyzerView: View {
                 PlainButton(title: "Reset peaks", action: onResetPeaks)
                     .keyboardShortcut("r")
             }
+            .padding(.top, 10)
+            .overlay(alignment: .top) { Rectangle().fill(Theme.hairline).frame(height: 1).padding(.horizontal, -14) }
             .fixedSize(horizontal: false, vertical: true)
             .layoutPriority(1)
         }
-        .padding(16)
-        .foregroundStyle(.white)
-        .background(Color.black)
+        .padding(14)
+        .font(Theme.body)
+        .foregroundStyle(Theme.text)
+        .tint(Theme.signal)
+        .background(Theme.background)
         .environment(\.colorScheme, .dark)
     }
 }
@@ -152,19 +159,38 @@ public struct AnalyzerView: View {
 extension AnalyzerView {
     // Tabs drawn in SwiftUI (not native AppKit controls) so offscreen
     // snapshots render them too.
+    // One groove; the selected tab is raised and lit along its lower edge by
+    // the icon ramp.
     private var tabs: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 2) {
             ForEach(InstrumentPage.allCases) { p in
+                let selected = page == p
                 Button { page = p } label: {
                     Text(p.rawValue)
+                        .font(.system(size: 12, weight: selected ? .semibold : .medium))
+                        .foregroundStyle(selected ? Theme.text : Theme.textSecondary)
                         .padding(.horizontal, 12).padding(.vertical, 5)
-                        .background(RoundedRectangle(cornerRadius: 5)
-                            .fill(page == p ? Color.accentColor.opacity(0.8) : Color.white.opacity(0.08)))
+                        .background {
+                            if selected {
+                                RoundedRectangle(cornerRadius: Theme.controlRadius).fill(Theme.raised)
+                                    .overlay(RoundedRectangle(cornerRadius: Theme.controlRadius)
+                                        .strokeBorder(Theme.raisedEdge, lineWidth: 1))
+                                    .overlay(alignment: .bottom) {
+                                        Capsule().fill(LinearGradient(gradient: Theme.rampGradient, startPoint: .leading, endPoint: .trailing))
+                                            .frame(height: 2).padding(.horizontal, 8)
+                                    }
+                            }
+                        }
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(selected ? .isSelected : [])
             }
             Spacer(minLength: 0)
         }
+        .padding(3)
+        .background(RoundedRectangle(cornerRadius: Theme.radius).fill(Theme.panel))
+        .overlay(RoundedRectangle(cornerRadius: Theme.radius).strokeBorder(Theme.hairline, lineWidth: 1))
     }
 }
 
