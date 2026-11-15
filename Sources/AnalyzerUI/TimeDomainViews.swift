@@ -199,10 +199,10 @@ public struct WaterfallView: View {
     }
 }
 
-/// Navy, violet, blue, cyan, white from the bottom of the range to the top
+/// Navy, deep violet, violet-blue, cyan, white from the bottom of the range to the top
 /// (the app icon's ramp, rising in lightness).
 func heatColor(_ db: Double, range: ClosedRange<Double>) -> (UInt8, UInt8, UInt8) {
-    let stops: [(Double, Double, Double)] = [(0.04, 0.05, 0.09), (0.18, 0.08, 0.38), (0.42, 0.27, 0.95), (0.29, 0.55, 1), (0.25, 0.88, 1), (0.95, 0.99, 1)]
+    let stops: [(Double, Double, Double)] = [(0.04, 0.05, 0.09), (0.06, 0.06, 0.16), (0.2, 0.09, 0.42), (0.38, 0.3, 0.95), (0.25, 0.85, 1), (0.95, 0.99, 1)]
     let t = min(max((db - range.lowerBound) / (range.upperBound - range.lowerBound), 0), 1) * Double(stops.count - 1)
     let i = min(Int(t), stops.count - 2), f = t - Double(i)
     let a = stops[i], b = stops[i + 1]
@@ -252,7 +252,7 @@ struct HistoryStrip: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
-                Text(title).font(Theme.small).foregroundStyle(Theme.textSecondary)
+                SectionLabel(title)
                 Spacer()
                 Text(readout).font(Theme.readout(10))
             }

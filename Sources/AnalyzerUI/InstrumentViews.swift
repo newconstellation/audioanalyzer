@@ -49,9 +49,11 @@ struct LevelMetersView: View {
                     }
                     if !compact {
                         Text(String(format: "%.1f", max(r.heldPeakDB, -99)))
-                            .font(Theme.readout(11, weight: .semibold))
+                            .font(Theme.readout(levels.count > 2 ? 10 : 11, weight: .semibold))
+                            .lineLimit(1).minimumScaleFactor(0.6)
                         Text(String(format: "%.1f", max(r.rmsDB, -99)))
-                            .font(Theme.readout(10)).foregroundStyle(Theme.textSecondary)
+                            .font(Theme.readout(levels.count > 2 ? 9 : 10)).foregroundStyle(Theme.textSecondary)
+                            .lineLimit(1).minimumScaleFactor(0.6)
                     }
                     Text(compact ? "\(index + 1)" : "IN \(index + 1)")
                         .font(.system(size: compact ? 8 : 9, weight: .semibold)).tracking(compact ? 0 : 1)

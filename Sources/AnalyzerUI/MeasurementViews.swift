@@ -26,11 +26,12 @@ struct FrequencyPlot<Content: View>: View {
     var title: String? = nil
     @ViewBuilder var content: (_ x: @escaping (Double, Double) -> Double, _ y: @escaping (Double, Double) -> Double) -> Content
 
-    private let leftGutter = 40.0, bottomGutter = 16.0
+    // Top and right gutters keep the end labels (0 dB, 20k) from clipping.
+    private let leftGutter = 40.0, bottomGutter = 16.0, topGutter = 6.0, rightGutter = 12.0
 
     var body: some View {
         GeometryReader { geo in
-            let w = geo.size.width - leftGutter, h = geo.size.height - bottomGutter
+            let w = geo.size.width - leftGutter - rightGutter, h = geo.size.height - bottomGutter - topGutter
             let xf: (Double, Double) -> Double = { f, width in scale.x(f, width: width) }
             let yf: (Double, Double) -> Double = { v, height in
                 height * (yRange.upperBound - min(max(v, yRange.lowerBound), yRange.upperBound)) / (yRange.upperBound - yRange.lowerBound)
@@ -58,16 +59,18 @@ struct FrequencyPlot<Content: View>: View {
                     ctx.stroke(frame, with: .color(Theme.hairline), lineWidth: 1)
                 }
                 .frame(width: w, height: h)
-                .offset(x: leftGutter)
+                .offset(x: leftGutter, y: topGutter)
 
                 content(xf, yf)
                     .frame(width: w, height: h)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .offset(x: leftGutter)
+                    .offset(x: leftGutter, y: topGutter)
 
                 if let title {
                     SectionLabel(title)
-                        .padding(.leading, leftGutter + 8).padding(.top, 7)
+                        .padding(.horizontal, 4).padding(.vertical, 1)
+                        .background(RoundedRectangle(cornerRadius: 3).fill(Theme.panel.opacity(0.85)))
+                        .padding(.leading, leftGutter + 4).padding(.top, topGutter + 5)
                         .allowsHitTesting(false)
                 }
 
@@ -76,13 +79,13 @@ struct FrequencyPlot<Content: View>: View {
                         .font(Theme.axis)
                         .foregroundStyle(Theme.textSecondary)
                         .frame(width: leftGutter - 4, alignment: .trailing)
-                        .position(x: (leftGutter - 4) / 2, y: yf(t.value, h))
+                        .position(x: (leftGutter - 4) / 2, y: topGutter + yf(t.value, h))
                 }
                 ForEach(LogFrequencyScale.gridFrequencies.filter { $0 <= scale.maxF }, id: \.self) { f in
                     Text(LogFrequencyScale.label(f))
                         .font(Theme.axis)
                         .foregroundStyle(Theme.textSecondary)
-                        .position(x: leftGutter + xf(f, w), y: h + bottomGutter / 2 + 1)
+                        .position(x: leftGutter + xf(f, w), y: topGutter + h + bottomGutter / 2 + 1)
                 }
             }
         }
