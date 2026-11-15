@@ -30,3 +30,16 @@ jobs:
         with:
           name: ui-snapshots
           path: snapshots/*.png
+
+  package-app:
+    needs: build-and-test
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the .app
+        run: tools/package/package-app.sh dist 0.1.0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AudioAnalyzer-app
+          path: dist/*.zip
