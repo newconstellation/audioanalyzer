@@ -6,6 +6,10 @@ public struct AnalyzerSnapshot: Sendable {
     public var spectrumDB: [Double] = []
     public var spectrumPeakDB: [Double] = []
     public var binWidth: Double = 1
+    /// Fractional-octave bands of the averaged spectrum (and its peak hold), in dBFS.
+    public var octaveBands: [OctaveBand] = []
+    public var octaveDB: [Double] = []
+    public var octavePeakDB: [Double] = []
     public var correlation: Double = 0
     public var balance: Double = 0
     public var sampleRate: Double = 0
@@ -53,6 +57,11 @@ public final class AnalysisEngine {
 
     // Time-domain instruments and histories.
     public var scopeSettings = ScopeSettings()
+    /// Band width for the octave analysis.
+    public var octaveFraction = OctaveFraction.third {
+        didSet { bands = octaveBands(octaveFraction) }
+    }
+    private var bands = octaveBands(.third)
     public static let waterfallColumns = 400
     /// Seconds between history points.
     public let historyStep = 0.05
@@ -150,6 +159,12 @@ public final class AnalysisEngine {
         s.spectrumDB = averager.averageDB
         s.spectrumPeakDB = averager.peakDB
         s.binWidth = analyzer?.binWidth ?? 1
+        if let analyzer {
+            let enbw = analyzer.equivalentNoiseBandwidth
+            s.octaveBands = bands
+            s.octaveDB = bandLevels(spectrumDB: s.spectrumDB, binWidth: s.binWidth, enbwBins: enbw, bands: bands)
+            s.octavePeakDB = bandLevels(spectrumDB: s.spectrumPeakDB, binWidth: s.binWidth, enbwBins: enbw, bands: bands)
+        }
         s.correlation = correlationMeter?.correlation ?? 0
         s.balance = correlationMeter?.balance ?? 0
         s.sampleRate = sampleRate

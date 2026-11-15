@@ -18,6 +18,7 @@ struct RenderSnapshot {
         try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         let pages: [(InstrumentPage, String, AnalyzerSnapshot)] = [
             (.meters, "meters", analyse(metersSignal())),
+            (.octave, "octave", analyse(metersSignal())),
             (.transferFunction, "transfer-function", analyse(transferSignal(), findDelay: true)),
             (.distortion, "thd", analyse(distortionSignal())),
             (.scope, "scope", analyse(metersSignal())),
@@ -25,7 +26,8 @@ struct RenderSnapshot {
         ]
         for (page, name, snapshot) in pages {
             let path = (dir as NSString).appendingPathComponent("\(name).png")
-            try render(AnalyzerView(snapshot: snapshot, page: page), to: path)
+            let actions = FileActions(open: {}, liveInput: {}, saveCapture: {})
+            try render(AnalyzerView(snapshot: snapshot, page: page, fileActions: actions), to: path)
         }
 
         // Generator page: the generator's own output analysed (internal loopback).

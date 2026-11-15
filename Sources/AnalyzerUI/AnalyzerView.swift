@@ -4,6 +4,7 @@ import SwiftUI
 /// The instrument pages of the main window.
 public enum InstrumentPage: String, CaseIterable, Identifiable, Sendable {
     case meters = "Meters & Spectrum"
+    case octave = "Octave"
     case transferFunction = "Transfer Function"
     case distortion = "THD"
     case scope = "Scope"
@@ -20,16 +21,25 @@ public struct AnalyzerView: View {
     public var onFindDelay: () -> Void
     var generator: Binding<GeneratorSettings>
     var loopback: Binding<Bool>
+    var octaveFraction: Binding<OctaveFraction>
+    /// What is being analysed, shown in the status bar ("Input", a file name...).
+    public var sourceName: String
+    public var fileActions: FileActions?
     @State private var page: InstrumentPage
 
     public init(snapshot: AnalyzerSnapshot, error: String? = nil, page: InstrumentPage = .meters,
                 generator: Binding<GeneratorSettings> = .constant(GeneratorSettings()),
                 loopback: Binding<Bool> = .constant(false),
+                octaveFraction: Binding<OctaveFraction> = .constant(.third),
+                sourceName: String = "Input", fileActions: FileActions? = nil,
                 onResetPeaks: @escaping () -> Void = {}, onFindDelay: @escaping () -> Void = {}) {
         self.snapshot = snapshot
         self.error = error
         self.generator = generator
         self.loopback = loopback
+        self.octaveFraction = octaveFraction
+        self.sourceName = sourceName
+        self.fileActions = fileActions
         self.onResetPeaks = onResetPeaks
         self.onFindDelay = onFindDelay
         _page = State(initialValue: page)
@@ -68,6 +78,9 @@ public struct AnalyzerView: View {
                             CorrelationBar(value: snapshot.correlation)
                                 .frame(height: 22)
                         }
+                    case .octave:
+                        OctaveView(bands: snapshot.octaveBands, levelsDB: snapshot.octaveDB,
+                                   peaksDB: snapshot.octavePeakDB, fraction: octaveFraction)
                     case .transferFunction:
                         TransferFunctionView(result: snapshot.transferFunction, onFindDelay: onFindDelay)
                     case .distortion:
@@ -92,9 +105,16 @@ public struct AnalyzerView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             HStack {
-                Text(snapshot.sampleRate > 0 ? "\(Int(snapshot.sampleRate)) Hz" : "No input")
+                Text(snapshot.sampleRate > 0 ? "\(sourceName), \(Int(snapshot.sampleRate)) Hz" : "No input")
                     .foregroundStyle(.secondary)
                 Spacer()
+                if let fileActions {
+                    PlainButton(title: "Open audio file…", action: fileActions.open)
+                    if sourceName != "Input" {
+                        PlainButton(title: "Back to input", action: fileActions.liveInput)
+                    }
+                    PlainButton(title: "Save capture…", action: fileActions.saveCapture)
+                }
                 PlainButton(title: "Reset peaks", action: onResetPeaks)
                     .keyboardShortcut("r")
             }
@@ -103,5 +123,17 @@ public struct AnalyzerView: View {
         .foregroundStyle(.white)
         .background(Color.black)
         .environment(\.colorScheme, .dark)
+    }
+}
+
+/// Status-bar actions for loading audio files and saving captures.
+public struct FileActions {
+    public var open: () -> Void
+    public var liveInput: () -> Void
+    public var saveCapture: () -> Void
+    public init(open: @escaping () -> Void, liveInput: @escaping () -> Void, saveCapture: @escaping () -> Void) {
+        self.open = open
+        self.liveInput = liveInput
+        self.saveCapture = saveCapture
     }
 }
