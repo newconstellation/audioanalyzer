@@ -31,6 +31,16 @@ sed -e "s/__NAME__/$APP_NAME/g" -e "s/__EXECUTABLE__/$EXECUTABLE/g" -e "s/__BUND
     "$HERE/Info.plist" > "$APP/Contents/Info.plist"
 plutil -lint "$APP/Contents/Info.plist"
 
+# App icon: tools/package/AppIcon.png (1024x1024, transparent outside the rounded tile) -> AppIcon.icns.
+ICONSET="$(mktemp -d)/AppIcon.iconset"
+mkdir -p "$ICONSET"
+for size in 16 32 128 256 512; do
+    sips -z $size $size "$HERE/AppIcon.png" --out "$ICONSET/icon_${size}x${size}.png" >/dev/null
+    sips -z $((size * 2)) $((size * 2)) "$HERE/AppIcon.png" --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null
+done
+iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
+ls -l "$APP/Contents/Resources/AppIcon.icns"
+
 codesign --force --sign - --entitlements "$HERE/AcousticStudioTools.entitlements" --timestamp=none "$APP"
 codesign --verify --verbose "$APP"
 
