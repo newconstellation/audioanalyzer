@@ -24,6 +24,13 @@ public struct OctaveBand: Sendable, Equatable {
     public var upper: Double
     /// Nominal frequency for labels (31.5, 63, 125, ... for octaves).
     public var nominal: Double
+
+    public init(center: Double, lower: Double, upper: Double, nominal: Double) {
+        self.center = center
+        self.lower = lower
+        self.upper = upper
+        self.nominal = nominal
+    }
 }
 
 /// The bands whose mid-band frequency falls within `range`, lowest first.

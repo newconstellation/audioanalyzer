@@ -27,6 +27,7 @@ final class AudioInput {
     private var engine: AnalysisEngine?
     private var inputRate = 0.0
     private var octaveFraction = OctaveFraction.third
+    private var decaySettings = DecaySettings()
 
     /// Shared with the real-time output thread, which only ever *tries* the
     /// lock and keeps its previous settings if it's busy.
@@ -59,6 +60,13 @@ final class AudioInput {
         }
     }
 
+    func setDecaySettings(_ d: DecaySettings) {
+        lock.withLock {
+            decaySettings = d
+            engine?.decaySettings = d
+        }
+    }
+
     func start() throws {
         let input = audioEngine.inputNode
         let format = input.outputFormat(forBus: 0)
@@ -79,6 +87,7 @@ final class AudioInput {
     private func makeEngine(sampleRate: Double) {
         let e = AnalysisEngine(sampleRate: sampleRate, channelCount: 2, fftSize: fftSize)
         e.octaveFraction = octaveFraction
+        e.decaySettings = decaySettings
         engine = e
         capture = CaptureRing(channels: 2, capacity: Int(Self.captureSeconds * sampleRate))
     }

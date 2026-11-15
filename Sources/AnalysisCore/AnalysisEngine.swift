@@ -15,6 +15,10 @@ public struct AnalyzerSnapshot: Sendable {
     public var sampleRate: Double = 0
     public var transferFunction: TransferFunctionResult?
     public var distortion: DistortionResult?
+    /// Impulse response from the transfer function, and its decay waterfall.
+    public var impulse: ImpulseResponse?
+    public var decay: DecayResult?
+    public var decaySettings = DecaySettings()
     public var scope = ScopeTrace()
     public var scopeSettings = ScopeSettings()
     /// Recent channel 1 / channel 2 sample pairs for the vectorscope.
@@ -54,6 +58,14 @@ public final class AnalysisEngine {
     private var samplesSinceDistortion = 0
     /// How often the distortion analysis is refreshed, in seconds.
     public var distortionInterval = 0.1
+    /// How often the impulse response and decay waterfall are refreshed, in seconds.
+    public var decayInterval = 0.5
+    public var decaySettings = DecaySettings() {
+        didSet { if decaySettings != oldValue { updateDecay() } }
+    }
+    private var samplesSinceDecay = 0
+    private var latestImpulse: ImpulseResponse?
+    private var latestDecay: DecayResult?
 
     // Time-domain instruments and histories.
     public var scopeSettings = ScopeSettings()
@@ -120,7 +132,17 @@ public final class AnalysisEngine {
             samplesSinceDistortion = 0
             latestDistortion = history.withUnsafeBufferPointer { distortionAnalyzer.analyze($0) }
         }
+        samplesSinceDecay += n
+        if transferFunction != nil, Double(samplesSinceDecay) >= decayInterval * sampleRate {
+            samplesSinceDecay = 0
+            updateDecay()
+        }
         updateTimeDomain(channels: channels, frameCount: n)
+    }
+
+    private func updateDecay() {
+        latestImpulse = transferFunction?.impulseResponse()
+        latestDecay = latestImpulse.map { cumulativeSpectralDecay($0, settings: decaySettings) }
     }
 
     private func updateTimeDomain(channels: [UnsafePointer<Float>], frameCount n: Int) {
@@ -170,6 +192,9 @@ public final class AnalysisEngine {
         s.sampleRate = sampleRate
         s.transferFunction = transferFunction?.result
         s.distortion = latestDistortion
+        s.impulse = latestImpulse
+        s.decay = latestDecay
+        s.decaySettings = decaySettings
         s.scope = captureScope(scopeBuffers, settings: scopeSettings, sampleRate: sampleRate)
         s.scopeSettings = scopeSettings
         let vs = min(2048, scopeBuffers[0].count)
@@ -189,6 +214,8 @@ public final class AnalysisEngine {
         guard let tf = transferFunction, let d = tf.findDelay() else { return nil }
         tf.delayCompensation += Int(d.rounded())
         tf.resetAverages()
+        latestImpulse = nil
+        latestDecay = nil
         return tf.delayCompensation
     }
 

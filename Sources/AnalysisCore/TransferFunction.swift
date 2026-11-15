@@ -138,6 +138,31 @@ public final class TransferFunctionAnalyzer {
         return r
     }
 
+    /// The impulse response from the averaged transfer function (H1 =
+    /// Gxy / Gxx, inverse FFT), `fftSize` samples long. It is rotated so the
+    /// first `preDelay` samples come before time zero (after delay
+    /// compensation), which keeps any pre-ringing visible. Nil before any data.
+    public func impulseResponse(preDelay: Int = 256) -> ImpulseResponse? {
+        guard frames > 0 else { return nil }
+        let n = fftSize, half = n / 2
+        var re = [Float](repeating: 0, count: n), im = [Float](repeating: 0, count: n)
+        for i in 0...half where gxx[i] > 0 {
+            re[i] = Float(gxyRe[i] / gxx[i])
+            im[i] = Float(gxyIm[i] / gxx[i])
+            if i > 0 && i < half {
+                re[n - i] = re[i]
+                im[n - i] = -im[i]
+            }
+        }
+        im[0] = 0; im[half] = 0
+        var outRe = [Float](repeating: 0, count: n), outIm = [Float](repeating: 0, count: n)
+        inverse.transform(inputReal: re, inputImaginary: im, outputReal: &outRe, outputImaginary: &outIm)
+        let pre = max(0, min(preDelay, n / 2))
+        let scale = 1 / Float(n)
+        let samples = (0..<n).map { k in outRe[(k - pre + n) % n] * scale }
+        return ImpulseResponse(samples: samples, sampleRate: sampleRate, zeroIndex: pre)
+    }
+
     /// Estimates the remaining delay of the response relative to the source,
     /// in samples (fractional), from the averaged cross-spectrum using
     /// coherence-weighted phase transform (GCC-PHAT). Add it to

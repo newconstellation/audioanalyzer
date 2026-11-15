@@ -6,6 +6,7 @@ public enum InstrumentPage: String, CaseIterable, Identifiable, Sendable {
     case meters = "Meters & Spectrum"
     case octave = "Octave"
     case transferFunction = "Transfer Function"
+    case decay = "Decay"
     case distortion = "THD"
     case scope = "Scope"
     case history = "Waterfall & History"
@@ -22,6 +23,7 @@ public struct AnalyzerView: View {
     var generator: Binding<GeneratorSettings>
     var loopback: Binding<Bool>
     var octaveFraction: Binding<OctaveFraction>
+    var decaySettings: Binding<DecaySettings>
     /// What is being analysed, shown in the status bar ("Input", a file name...).
     public var sourceName: String
     public var fileActions: FileActions?
@@ -31,6 +33,7 @@ public struct AnalyzerView: View {
                 generator: Binding<GeneratorSettings> = .constant(GeneratorSettings()),
                 loopback: Binding<Bool> = .constant(false),
                 octaveFraction: Binding<OctaveFraction> = .constant(.third),
+                decaySettings: Binding<DecaySettings> = .constant(DecaySettings()),
                 sourceName: String = "Input", fileActions: FileActions? = nil,
                 onResetPeaks: @escaping () -> Void = {}, onFindDelay: @escaping () -> Void = {}) {
         self.snapshot = snapshot
@@ -38,6 +41,7 @@ public struct AnalyzerView: View {
         self.generator = generator
         self.loopback = loopback
         self.octaveFraction = octaveFraction
+        self.decaySettings = decaySettings
         self.sourceName = sourceName
         self.fileActions = fileActions
         self.onResetPeaks = onResetPeaks
@@ -83,6 +87,8 @@ public struct AnalyzerView: View {
                                    peaksDB: snapshot.octavePeakDB, fraction: octaveFraction)
                     case .transferFunction:
                         TransferFunctionView(result: snapshot.transferFunction, onFindDelay: onFindDelay)
+                    case .decay:
+                        DecayView(impulse: snapshot.impulse, decay: snapshot.decay, settings: decaySettings)
                     case .distortion:
                         DistortionView(result: snapshot.distortion)
                     case .scope:

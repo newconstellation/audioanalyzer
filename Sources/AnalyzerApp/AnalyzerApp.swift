@@ -19,7 +19,8 @@ struct AnalyzerMainApp: App {
         WindowGroup("Analyzer") {
             AnalyzerView(snapshot: model.snapshot, error: model.error,
                          generator: $model.generator, loopback: $model.loopback,
-                         octaveFraction: $model.octaveFraction, sourceName: model.sourceName,
+                         octaveFraction: $model.octaveFraction, decaySettings: $model.decaySettings,
+                         sourceName: model.sourceName,
                          fileActions: FileActions(open: { model.openFile() }, liveInput: { model.liveInput() },
                                                   saveCapture: { model.saveCapture() }),
                          onResetPeaks: model.resetPeaks, onFindDelay: model.findDelay)
@@ -46,6 +47,9 @@ final class AnalyzerModel {
     }
     var octaveFraction = OctaveFraction.third {
         didSet { input.setOctaveFraction(octaveFraction) }
+    }
+    var decaySettings = DecaySettings() {
+        didSet { input.setDecaySettings(decaySettings) }
     }
     var sourceName = "Input"
     private let input = AudioInput()

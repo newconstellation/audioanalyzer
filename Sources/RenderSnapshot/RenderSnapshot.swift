@@ -20,6 +20,7 @@ struct RenderSnapshot {
             (.meters, "meters", analyse(metersSignal())),
             (.octave, "octave", analyse(metersSignal())),
             (.transferFunction, "transfer-function", analyse(transferSignal(), findDelay: true)),
+            (.decay, "decay", analyse(transferSignal(resonance: true), findDelay: true)),
             (.distortion, "thd", analyse(distortionSignal())),
             (.scope, "scope", analyse(metersSignal())),
             (.history, "history", analyse(historySignal())),
@@ -127,7 +128,9 @@ struct RenderSnapshot {
     /// A "device under test": pink noise through an 80 Hz high-pass, a +6 dB
     /// bell at 1 kHz and a -4 dB high shelf at 8 kHz, 2.5 ms of latency, and a
     /// little added noise (so coherence drops where the source is weak).
-    static func transferSignal() -> (left: [Float], right: [Float]) {
+    /// With `resonance`, adds a ringing 120 Hz mode (+10 dB, Q 12) and a
+    /// 3 kHz one (+6 dB, Q 8), so the decay waterfall has something to show.
+    static func transferSignal(resonance: Bool = false) -> (left: [Float], right: [Float]) {
         let n = Int(6 * fs)
         var rng = SplitMix64(seed: 7)
         var pink = PinkNoise()
@@ -135,11 +138,14 @@ struct RenderSnapshot {
         var hp = Biquad.highPass(f: 80, q: 0.707, fs: fs)
         var bell = Biquad.peaking(f: 1000, q: 1.4, gainDB: 6, fs: fs)
         var shelf = Biquad.highShelf(f: 8000, gainDB: -4, fs: fs)
+        var mode1 = Biquad.peaking(f: 120, q: 12, gainDB: resonance ? 10 : 0, fs: fs)
+        var mode2 = Biquad.peaking(f: 3000, q: 8, gainDB: resonance ? 6 : 0, fs: fs)
         let latency = Int(0.0025 * fs)
         var response = [Double](repeating: 0, count: n)
         for i in 0..<n {
             let x = i >= latency ? source[i - latency] : 0
-            response[i] = shelf.process(bell.process(hp.process(x))) + dbToAmplitude(-70) * rng.nextGaussian()
+            let y = shelf.process(bell.process(hp.process(x)))
+            response[i] = (resonance ? mode2.process(mode1.process(y)) : y) + dbToAmplitude(-70) * rng.nextGaussian()
         }
         return (source.map(Float.init), response.map(Float.init))
     }
