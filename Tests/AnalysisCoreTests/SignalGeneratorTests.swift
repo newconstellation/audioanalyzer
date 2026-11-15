@@ -153,8 +153,8 @@ final class SignalGeneratorTests: XCTestCase {
             XCTAssertEqual(steps, steps.rounded(), accuracy: 1e-3)
         }
         // TPDF dither on silence: 0 with p = 0.75, +/-1 LSB with p = 0.125 each,
-        // so RMS = LSB / 2 = -102.3 dBFS.
-        XCTAssertEqual(rmsDB(x), -102.35, accuracy: 0.3)
+        // so RMS = LSB / 2. LSB = 2^-15 (-90.3 dBFS), so RMS = -96.3 dBFS.
+        XCTAssertEqual(rmsDB(x), -96.33, accuracy: 0.2)
         let mean = x.reduce(0) { $0 + Double($1) } / Double(x.count)
         XCTAssertEqual(mean, 0, accuracy: lsb * 0.02)
     }
