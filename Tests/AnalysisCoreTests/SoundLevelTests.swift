@@ -108,8 +108,9 @@ final class EngineCalibrationTests: XCTestCase {
         XCTAssertNil(engine.snapshot.calibration)
         XCTAssertNil(engine.calibrationOffsets[0])
         XCTAssertEqual(try XCTUnwrap(engine.calibrationOffsets[1]), expected, accuracy: 0.05)
-        // The calibrated channel's slow A level now reads about 114 dB SPL (A is 0 dB at 1 kHz).
-        let la = engine.snapshot.soundLevels[1].a.slow + expected
+        // The calibrated channel's A-weighted Leq now reads about 114 dB SPL (A is 0 dB at 1 kHz).
+        // (Slow would still be settling after 1.5 s: its time constant is 1 s.)
+        let la = engine.snapshot.soundLevels[1].a.leq + expected
         XCTAssertEqual(la, 114, accuracy: 0.3)
     }
 }
