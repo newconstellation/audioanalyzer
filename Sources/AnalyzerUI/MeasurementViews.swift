@@ -146,8 +146,8 @@ public struct TransferFunctionView: View {
 
     private var plots: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 18) {
-                SectionLabel(perMic.count > 1 ? "Average of \(perMic.count) mics · \(averaging.rawValue)" : "Reference → measurement mic")
+            HStack(spacing: 14) {
+                SectionLabel(perMic.count > 1 ? "Average of \(perMic.count) mics · \(averaging.rawValue)" : "Ref → mic")
                 if let r = result {
                     if perMic.count > 1 {
                         LabeledReadout(label: "Delays", value: perMic.map { "\($0.delayCompensationSamples)" }.joined(separator: ", ") + " smp")
@@ -261,6 +261,8 @@ struct LabeledReadout: View {
             SectionLabel(label)
             Text(value).font(Theme.readout(11))
         }
+        .lineLimit(1)
+        .fixedSize()
     }
 }
 

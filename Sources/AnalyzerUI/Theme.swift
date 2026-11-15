@@ -98,6 +98,7 @@ struct SectionLabel: View {
             .font(Theme.label)
             .tracking(1.1)
             .foregroundStyle(Theme.textSecondary)
+            .lineLimit(1)
     }
 }
 

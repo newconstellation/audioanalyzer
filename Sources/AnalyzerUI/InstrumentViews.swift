@@ -19,7 +19,7 @@ struct LevelMetersView: View {
 
     /// The width the meter bridge needs for `count` inputs.
     static func width(channels count: Int) -> CGFloat {
-        count <= 4 ? 130 : min(max(130, CGFloat(count) * 13), 240)
+        count <= 2 ? 130 : count <= 4 ? 150 : min(max(150, CGFloat(count) * 13), 240)
     }
 
     var body: some View {
@@ -59,7 +59,7 @@ struct LevelMetersView: View {
             }
             if !compact {
                 Text(String(format: "%.1f", max(r.heldPeakDB, -99)))
-                    .font(Theme.readout(levels.count > 2 ? 10 : 11, weight: .semibold))
+                    .font(Theme.readout(levels.count > 2 ? 9 : 11, weight: .semibold))
                     .lineLimit(1).minimumScaleFactor(0.6)
                 Text(String(format: "%.1f", max(r.rmsDB, -99)))
                     .font(Theme.readout(levels.count > 2 ? 9 : 10)).foregroundStyle(Theme.textSecondary)
