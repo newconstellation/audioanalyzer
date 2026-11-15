@@ -3,14 +3,16 @@ import SwiftUI
 
 /// The instrument pages of the main window.
 public enum InstrumentPage: String, CaseIterable, Identifiable, Sendable {
-    case meters = "Meters & Spectrum"
+    case meters = "Spectrum"
     case octave = "Octave"
+    case spl = "SPL"
     case transferFunction = "Transfer Function"
     case decay = "Decay"
     case distortion = "THD"
     case scope = "Scope"
-    case history = "Waterfall & History"
+    case history = "History"
     case generator = "Generator"
+    case inputs = "Inputs"
     public var id: String { rawValue }
 }
 
@@ -27,6 +29,9 @@ public struct AnalyzerView: View {
     /// What is being analysed, shown in the status bar ("Input", a file name...).
     public var sourceName: String
     public var fileActions: FileActions?
+    var splControls: SPLControls?
+    var routing: Binding<ChannelRouting>?
+    var inputDevices: InputDeviceControls?
     @State private var page: InstrumentPage
 
     public init(snapshot: AnalyzerSnapshot, error: String? = nil, page: InstrumentPage = .meters,
@@ -34,7 +39,8 @@ public struct AnalyzerView: View {
                 loopback: Binding<Bool> = .constant(false),
                 octaveFraction: Binding<OctaveFraction> = .constant(.third),
                 decaySettings: Binding<DecaySettings> = .constant(DecaySettings()),
-                sourceName: String = "Input", fileActions: FileActions? = nil,
+                sourceName: String = "Input", fileActions: FileActions? = nil, splControls: SPLControls? = nil,
+                routing: Binding<ChannelRouting>? = nil, inputDevices: InputDeviceControls? = nil,
                 onResetPeaks: @escaping () -> Void = {}, onFindDelay: @escaping () -> Void = {}) {
         self.snapshot = snapshot
         self.error = error
@@ -44,6 +50,9 @@ public struct AnalyzerView: View {
         self.decaySettings = decaySettings
         self.sourceName = sourceName
         self.fileActions = fileActions
+        self.splControls = splControls
+        self.routing = routing
+        self.inputDevices = inputDevices
         self.onResetPeaks = onResetPeaks
         self.onFindDelay = onFindDelay
         _page = State(initialValue: page)
@@ -78,15 +87,22 @@ public struct AnalyzerView: View {
                             SpectrumView(averageDB: snapshot.spectrumDB,
                                          peakDB: snapshot.spectrumPeakDB,
                                          binWidth: snapshot.binWidth,
-                                         sampleRate: snapshot.sampleRate)
+                                         sampleRate: snapshot.sampleRate,
+                                         offsetDB: snapshot.calibrationOffsets.first ?? nil)
                             CorrelationBar(value: snapshot.correlation)
                                 .frame(height: 22)
                         }
                     case .octave:
                         OctaveView(bands: snapshot.octaveBands, levelsDB: snapshot.octaveDB,
                                    peaksDB: snapshot.octavePeakDB, fraction: octaveFraction)
+                    case .spl:
+                        SPLView(snapshot: snapshot,
+                                controls: splControls ?? .constant(channel: snapshot.splChannel,
+                                                                   leqPeriodSeconds: snapshot.leqPeriodSeconds,
+                                                                   offsets: snapshot.calibrationOffsets))
                     case .transferFunction:
-                        TransferFunctionView(result: snapshot.transferFunction, onFindDelay: onFindDelay)
+                        TransferFunctionView(result: snapshot.transferFunction, perMic: snapshot.transferFunctionsPerMic,
+                                             averaging: snapshot.routing.transferAverage, onFindDelay: onFindDelay)
                     case .decay:
                         DecayView(impulse: snapshot.impulse, decay: snapshot.decay, settings: decaySettings)
                     case .distortion:
@@ -104,6 +120,8 @@ public struct AnalyzerView: View {
                             HistoriesView(snapshot: snapshot)
                                 .frame(height: 230)
                         }
+                    case .inputs:
+                        InputsView(snapshot: snapshot, routing: routing ?? .constant(snapshot.routing), devices: inputDevices)
                     case .generator:
                         GeneratorView(settings: generator, loopback: loopback)
                     }

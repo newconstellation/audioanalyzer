@@ -19,12 +19,22 @@ struct RenderSnapshot {
         let pages: [(InstrumentPage, String, AnalyzerSnapshot)] = [
             (.meters, "meters", analyse(metersSignal())),
             (.octave, "octave", analyse(metersSignal())),
+            // Calibrated as if 0 dB re FS RMS were 110 dB SPL.
+            (.spl, "spl", analyse(metersSignal()) { $0.calibrationOffsets[0] = 110 }),
             (.transferFunction, "transfer-function", analyse(transferSignal(), findDelay: true)),
             (.decay, "decay", analyse(transferSignal(resonance: true), findDelay: true)),
             (.distortion, "thd", analyse(distortionSignal())),
             (.scope, "scope", analyse(metersSignal())),
             (.history, "history", analyse(historySignal())),
         ]
+        // Three mics at different positions, each with its own delay and a
+        // reflection, averaged.
+        let multi = analyseMulti(multiMicSignal())
+        try render(AnalyzerView(snapshot: multi, page: .transferFunction), to: (dir as NSString).appendingPathComponent("transfer-function-3-mics.png"))
+        try render(AnalyzerView(snapshot: multi, page: .inputs,
+                                inputDevices: InputDeviceControls(names: ["USB Audio Interface"], selected: .constant("USB Audio Interface"))),
+                   to: (dir as NSString).appendingPathComponent("inputs.png"))
+
         for (page, name, snapshot) in pages {
             let path = (dir as NSString).appendingPathComponent("\(name).png")
             let actions = FileActions(open: {}, liveInput: {}, saveCapture: {})
@@ -61,8 +71,10 @@ struct RenderSnapshot {
         print("wrote \(path) (\(cg.width)x\(cg.height))")
     }
 
-    static func analyse(_ signal: (left: [Float], right: [Float]), findDelay: Bool = false) -> AnalyzerSnapshot {
+    static func analyse(_ signal: (left: [Float], right: [Float]), findDelay: Bool = false,
+                        configure: (AnalysisEngine) -> Void = { _ in }) -> AnalyzerSnapshot {
         let engine = AnalysisEngine(sampleRate: fs, channelCount: 2)
+        configure(engine)
         func feed() {
             signal.left.withUnsafeBufferPointer { lp in
                 signal.right.withUnsafeBufferPointer { rp in
@@ -81,6 +93,55 @@ struct RenderSnapshot {
             feed()
         }
         return engine.snapshot
+    }
+
+    static func analyseMulti(_ channels: [[Float]]) -> AnalyzerSnapshot {
+        let engine = AnalysisEngine(sampleRate: fs, channelCount: channels.count)
+        var routing = ChannelRouting()
+        routing.reference = 0
+        routing.measurementChannels = Array(1..<channels.count)
+        routing.spectrumChannels = Array(1..<channels.count)
+        engine.routing = routing
+        engine.calibrationOffsets[1] = 112.4
+        let n = channels[0].count
+        func feed(_ range: Range<Int>) {
+            var i = range.lowerBound
+            while i < range.upperBound {
+                let len = min(1024, range.upperBound - i)
+                let ptrs = channels.map { ch in ch.withUnsafeBufferPointer { $0.baseAddress! + i } }
+                engine.process(channels: ptrs, frameCount: len)
+                i += len
+            }
+        }
+        feed(0..<(n / 2))
+        engine.findAndApplyDelay()
+        feed((n / 2)..<n)
+        return engine.snapshot
+    }
+
+    /// Reference (pink noise) plus three mics: the same loudspeaker response
+    /// at each, with a different distance (delay and level) and one
+    /// reflection each, so each mic shows its own comb filtering.
+    static func multiMicSignal() -> [[Float]] {
+        let n = Int(8 * fs)
+        var rng = SplitMix64(seed: 99)
+        var pink = PinkNoise()
+        let source = (0..<n).map { _ in dbToAmplitude(-20) / 0.15 * pink.next(rng.nextGaussian()) }
+        var bell = Biquad.peaking(f: 2500, q: 1.2, gainDB: 4, fs: fs)
+        var hp = Biquad.highPass(f: 60, q: 0.707, fs: fs)
+        let speaker = source.map { bell.process(hp.process($0)) }
+        let mics: [(delayMs: Double, gain: Double, reflectionMs: Double, reflectionGain: Double)] =
+            [(4.0, 0.5, 1.3, 0.45), (6.5, 0.35, 2.9, 0.5), (9.0, 0.25, 0.7, 0.4)]
+        var channels = [source.map(Float.init)]
+        for m in mics {
+            let d = Int(m.delayMs / 1000 * fs), r = d + Int(m.reflectionMs / 1000 * fs)
+            channels.append((0..<n).map { i in
+                let direct = i >= d ? speaker[i - d] : 0
+                let refl = i >= r ? speaker[i - r] : 0
+                return Float(m.gain * (direct + m.reflectionGain * refl) + dbToAmplitude(-75) * rng.nextGaussian())
+            })
+        }
+        return channels
     }
 
     /// 3 s of stereo: pink noise at -26 dBFS RMS plus tones at 100 Hz (-18 dBFS)

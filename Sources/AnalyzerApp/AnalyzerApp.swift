@@ -23,6 +23,14 @@ struct AnalyzerMainApp: App {
                          sourceName: model.sourceName,
                          fileActions: FileActions(open: { model.openFile() }, liveInput: { model.liveInput() },
                                                   saveCapture: { model.saveCapture() }),
+                         splControls: SPLControls(channel: $model.splChannel, leqPeriodSeconds: $model.leqPeriodSeconds,
+                                                  calibratorLevel: $model.calibratorLevel, offsets: $model.calibrationOffsets,
+                                                  reset: { model.resetSoundLevels() },
+                                                  startCalibration: { model.startCalibration() },
+                                                  applyCalibration: { model.applyCalibration() },
+                                                  cancelCalibration: { model.cancelCalibration() }),
+                         routing: $model.routing,
+                         inputDevices: InputDeviceControls(names: model.inputDeviceNames, selected: $model.inputDevice),
                          onResetPeaks: model.resetPeaks, onFindDelay: model.findDelay)
                 .frame(minWidth: 900, minHeight: 560)
                 .task { await model.start() }
@@ -52,6 +60,67 @@ final class AnalyzerModel {
         didSet { input.setDecaySettings(decaySettings) }
     }
     var sourceName = "Input"
+    var splChannel = 0 {
+        didSet { input.setSPL(channel: splChannel, leqPeriodSeconds: leqPeriodSeconds) }
+    }
+    var leqPeriodSeconds = 60.0 {
+        didSet { input.setSPL(channel: splChannel, leqPeriodSeconds: leqPeriodSeconds) }
+    }
+    var calibratorLevel = 94.0
+    /// Input roles and multi-mic averaging. Saved between launches.
+    var routing: ChannelRouting = AnalyzerModel.load("routing") ?? ChannelRouting() {
+        didSet {
+            input.setRouting(routing)
+            AnalyzerModel.save(routing, "routing")
+        }
+    }
+    var inputDeviceNames: [String] = []
+    /// The chosen input device's name, nil for the system default. Saved between launches.
+    var inputDevice: String? = UserDefaults.standard.string(forKey: "inputDevice") {
+        didSet {
+            UserDefaults.standard.set(inputDevice, forKey: "inputDevice")
+            guard started else { return }
+            do {
+                try input.selectInputDevice(named: inputDevice)
+                error = nil
+            } catch {
+                self.error = error.localizedDescription
+            }
+        }
+    }
+    private var started = false
+
+    private static func load<T: Decodable>(_ key: String) -> T? {
+        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
+        return try? JSONDecoder().decode(T.self, from: data)
+    }
+    private static func save<T: Encodable>(_ value: T, _ key: String) {
+        if let data = try? JSONEncoder().encode(value) { UserDefaults.standard.set(data, forKey: key) }
+    }
+    /// Per input channel, dB to add to get dB SPL. Saved between launches.
+    var calibrationOffsets: [Double?] = AnalyzerModel.loadOffsets() {
+        didSet {
+            input.setCalibrationOffsets(calibrationOffsets)
+            AnalyzerModel.saveOffsets(calibrationOffsets)
+        }
+    }
+
+    private static let offsetsKey = "calibrationOffsets"
+    private static func loadOffsets() -> [Double?] {
+        guard let data = UserDefaults.standard.data(forKey: offsetsKey),
+              let offsets = try? JSONDecoder().decode([Double?].self, from: data) else { return [] }
+        return offsets
+    }
+    private static func saveOffsets(_ offsets: [Double?]) {
+        if let data = try? JSONEncoder().encode(offsets) { UserDefaults.standard.set(data, forKey: offsetsKey) }
+    }
+
+    func startCalibration() { input.startCalibration(channel: splChannel, referenceSPL: calibratorLevel) }
+    func applyCalibration() {
+        if let offsets = input.applyCalibration() { calibrationOffsets = offsets }
+    }
+    func cancelCalibration() { input.cancelCalibration() }
+    func resetSoundLevels() { input.resetSoundLevels() }
     private let input = AudioInput()
 
     @MainActor
@@ -63,7 +132,19 @@ final class AnalyzerModel {
         }
         input.onSnapshot = { [weak self] in self?.snapshot = $0 }
         input.setGenerator(generator)
-        do { try input.start() } catch { self.error = error.localizedDescription }
+        input.setCalibrationOffsets(calibrationOffsets)
+        input.setRouting(routing)
+        inputDeviceNames = AudioDevices.inputs().map(\.name)
+        do {
+            if let inputDevice, inputDeviceNames.contains(inputDevice) {
+                try input.selectInputDevice(named: inputDevice)
+            } else {
+                try input.start()
+            }
+        } catch {
+            self.error = error.localizedDescription
+        }
+        started = true
     }
 
     @MainActor
