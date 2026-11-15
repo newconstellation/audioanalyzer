@@ -23,7 +23,11 @@ public struct AnalyzerSnapshot: Sendable {
     public var correlation: Double = 0
     public var balance: Double = 0
     public var sampleRate: Double = 0
+    /// The transfer function, averaged over the measurement mics.
     public var transferFunction: TransferFunctionResult?
+    /// Each measurement mic's own transfer function, when there are several.
+    public var transferFunctionsPerMic: [TransferFunctionResult] = []
+    public var routing = ChannelRouting()
     public var distortion: DistortionResult?
     /// Impulse response from the transfer function, and its decay waterfall.
     public var impulse: ImpulseResponse?
@@ -49,9 +53,9 @@ public struct AnalyzerSnapshot: Sendable {
 /// app and by the offline renderer, so both show exactly the same analysis.
 /// Not thread-safe: feed and read it from one thread at a time.
 ///
-/// Channel roles for now: channel 1 feeds the spectrum and the distortion
-/// analyzer; the transfer function uses channel 1 as source and channel 2 as
-/// response.
+/// Channel roles come from `routing`: by default channel 1 feeds the
+/// spectrum and the distortion analyzer, and the transfer function uses
+/// channel 1 as reference and channel 2 as the measurement mic.
 public final class AnalysisEngine {
     public let sampleRate: Double
     public let channelCount: Int
@@ -71,10 +75,20 @@ public final class AnalysisEngine {
     private let correlationMeter: CorrelationMeter?
     private let analyzer: SpectrumAnalyzer?
     private var averager = SpectrumAverager(mode: .exponential(seconds: 0.3))
-    public let transferFunction: TransferFunctionAnalyzer?
+    /// One transfer function per measurement mic, in `routing.measurementChannels` order.
+    public private(set) var transferFunctions: [TransferFunctionAnalyzer] = []
+    /// The first measurement mic's transfer function.
+    public var transferFunction: TransferFunctionAnalyzer? { transferFunctions.first }
+    /// Which inputs feed the spectrum and transfer function, and how mics are averaged.
+    public var routing = ChannelRouting() {
+        didSet {
+            routing = routing.validated(channelCount: channelCount)
+            if routing != oldValue { applyRouting(old: oldValue) }
+        }
+    }
+    private var histories: [Int: [Float]] = [:]
     public let distortionAnalyzer: DistortionAnalyzer?
     private var latestDistortion: DistortionResult?
-    private var history: [Float] = []
     private let historyLength: Int
     private var samplesSinceDistortion = 0
     /// How often the distortion analysis is refreshed, in seconds.
@@ -118,7 +132,6 @@ public final class AnalysisEngine {
         calibrationOffsets = Array(repeating: nil, count: channelCount)
         correlationMeter = channelCount >= 2 ? CorrelationMeter(sampleRate: sampleRate) : nil
         analyzer = SpectrumAnalyzer(fftSize: fftSize, window: .hann, sampleRate: sampleRate)
-        transferFunction = channelCount >= 2 ? TransferFunctionAnalyzer(sampleRate: sampleRate) : nil
         distortionAnalyzer = DistortionAnalyzer(sampleRate: sampleRate)
         historyLength = max(fftSize, distortionAnalyzer?.fftSize ?? 0)
         let scopeChannels = min(2, max(1, channelCount))
@@ -127,6 +140,26 @@ public final class AnalysisEngine {
         powerHistory = Array(repeating: History(capacity: 600), count: scopeChannels)
         stepPeak = Array(repeating: 0, count: scopeChannels)
         stepSquares = Array(repeating: 0, count: scopeChannels)
+        routing = ChannelRouting().validated(channelCount: channelCount)
+        applyRouting(old: nil)
+    }
+
+    /// Rebuilds transfer functions for changed mics (keeping those that stay,
+    /// with their averages and delays) and resets the spectrum average.
+    private func applyRouting(old: ChannelRouting?) {
+        let keep = old?.reference == routing.reference ? old?.measurementChannels ?? [] : []
+        var byChannel: [Int: TransferFunctionAnalyzer] = [:]
+        for (ch, tf) in zip(keep, transferFunctions) { byChannel[ch] = tf }
+        transferFunctions = routing.measurementChannels.compactMap { ch in
+            byChannel[ch] ?? TransferFunctionAnalyzer(sampleRate: sampleRate)
+        }
+        if old?.spectrumChannels != routing.spectrumChannels || old?.spectrumAverage != routing.spectrumAverage {
+            averager.reset()
+            lastSpectrum = []
+            histories = histories.filter { routing.spectrumChannels.contains($0.key) }
+        }
+        latestImpulse = nil
+        latestDecay = nil
     }
 
     /// `channels[c]` points at `frameCount` samples for channel `c`.
@@ -145,26 +178,40 @@ public final class AnalysisEngine {
             let left = UnsafeBufferPointer(start: channels[0], count: n)
             let right = UnsafeBufferPointer(start: channels[1], count: n)
             correlationMeter?.process(left: left, right: right)
-            transferFunction?.process(source: left, response: right)
         }
-        guard let first = channels.first else { return }
-        history.append(contentsOf: UnsafeBufferPointer(start: first, count: n))
-        if history.count > historyLength {
-            history.removeFirst(history.count - historyLength)
+        if routing.reference < channels.count {
+            let source = UnsafeBufferPointer(start: channels[routing.reference], count: n)
+            for (ch, tf) in zip(routing.measurementChannels, transferFunctions) where ch < channels.count {
+                tf.process(source: source, response: UnsafeBufferPointer(start: channels[ch], count: n))
+            }
         }
-        if let analyzer, history.count >= analyzer.fftSize {
-            let spectrum = history.withUnsafeBufferPointer { analyzer.spectrumDB($0) }
-            averager.add(spectrum, updateInterval: Double(n) / sampleRate)
-            lastSpectrum = spectrum
+        guard !channels.isEmpty else { return }
+        for ch in routing.spectrumChannels where ch < channels.count {
+            var h = histories[ch] ?? []
+            histories[ch] = nil // avoid a copy while appending
+            h.append(contentsOf: UnsafeBufferPointer(start: channels[ch], count: n))
+            if h.count > historyLength { h.removeFirst(h.count - historyLength) }
+            histories[ch] = h
+        }
+        if let analyzer {
+            let spectra: [[Double]] = routing.spectrumChannels.compactMap { ch in
+                guard let h = histories[ch], h.count >= analyzer.fftSize else { return nil }
+                return h.withUnsafeBufferPointer { analyzer.spectrumDB($0) }
+            }
+            if !spectra.isEmpty {
+                let spectrum = averageSpectra(spectra, binWidth: analyzer.binWidth, mode: routing.spectrumAverage)
+                averager.add(spectrum, updateInterval: Double(n) / sampleRate)
+                lastSpectrum = spectrum
+            }
         }
         samplesSinceDistortion += n
-        if let distortionAnalyzer, history.count >= distortionAnalyzer.fftSize,
+        if let distortionAnalyzer, let h = histories[routing.spectrumChannels[0]], h.count >= distortionAnalyzer.fftSize,
            Double(samplesSinceDistortion) >= distortionInterval * sampleRate {
             samplesSinceDistortion = 0
-            latestDistortion = history.withUnsafeBufferPointer { distortionAnalyzer.analyze($0) }
+            latestDistortion = h.withUnsafeBufferPointer { distortionAnalyzer.analyze($0) }
         }
         samplesSinceDecay += n
-        if transferFunction != nil, Double(samplesSinceDecay) >= decayInterval * sampleRate {
+        if !transferFunctions.isEmpty, Double(samplesSinceDecay) >= decayInterval * sampleRate {
             samplesSinceDecay = 0
             updateDecay()
         }
@@ -237,7 +284,10 @@ public final class AnalysisEngine {
         s.correlation = correlationMeter?.correlation ?? 0
         s.balance = correlationMeter?.balance ?? 0
         s.sampleRate = sampleRate
-        s.transferFunction = transferFunction?.result
+        let tfs = transferFunctions.map(\.result)
+        s.transferFunction = tfs.isEmpty ? nil : averageTransferFunctions(tfs, mode: routing.transferAverage)
+        s.transferFunctionsPerMic = tfs.count > 1 ? tfs : []
+        s.routing = routing
         s.distortion = latestDistortion
         s.impulse = latestImpulse
         s.decay = latestDecay
@@ -254,16 +304,21 @@ public final class AnalysisEngine {
         return s
     }
 
-    /// Finds the source-to-response delay, applies it, and restarts the
-    /// transfer-function averages. Returns the new compensation in samples.
+    /// Finds each measurement mic's delay from the reference, applies it, and
+    /// restarts the transfer-function averages. Returns the first mic's new
+    /// compensation in samples.
     @discardableResult
     public func findAndApplyDelay() -> Int? {
-        guard let tf = transferFunction, let d = tf.findDelay() else { return nil }
-        tf.delayCompensation += Int(d.rounded())
-        tf.resetAverages()
+        var first: Int?
+        for tf in transferFunctions {
+            guard let d = tf.findDelay() else { continue }
+            tf.delayCompensation += Int(d.rounded())
+            tf.resetAverages()
+            if tf === transferFunctions.first { first = tf.delayCompensation }
+        }
         latestImpulse = nil
         latestDecay = nil
-        return tf.delayCompensation
+        return first
     }
 
     /// Starts measuring a calibrator on `channel`. Watch `snapshot.calibration`
@@ -294,7 +349,7 @@ public final class AnalysisEngine {
         meters.forEach { $0.reset() }
         correlationMeter?.reset()
         averager.reset()
-        transferFunction?.resetAverages()
+        transferFunctions.forEach { $0.resetAverages() }
         waterfall.removeAll()
         correlationHistory.removeAll()
         balanceHistory.removeAll()

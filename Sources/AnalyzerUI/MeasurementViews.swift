@@ -92,10 +92,16 @@ func columns(frequencies: [Double], width: Double, scale: LogFrequencyScale) -> 
 
 public struct TransferFunctionView: View {
     let result: TransferFunctionResult?
+    /// Each mic's own response when several are averaged (drawn faintly).
+    var perMic: [TransferFunctionResult]
+    var averaging: SpatialAverage
     var onFindDelay: () -> Void
 
-    public init(result: TransferFunctionResult?, onFindDelay: @escaping () -> Void = {}) {
+    public init(result: TransferFunctionResult?, perMic: [TransferFunctionResult] = [],
+                averaging: SpatialAverage = .coherenceWeighted, onFindDelay: @escaping () -> Void = {}) {
         self.result = result
+        self.perMic = perMic
+        self.averaging = averaging
         self.onFindDelay = onFindDelay
     }
 
@@ -120,10 +126,15 @@ public struct TransferFunctionView: View {
     private var plots: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 16) {
-                Text("Source: ch 1   Response: ch 2").foregroundStyle(.secondary)
+                Text(perMic.count > 1 ? "Average of \(perMic.count) mics (\(averaging.rawValue))" : "Reference vs measurement mic")
+                    .foregroundStyle(.secondary)
                 if let r = result {
-                    Text(String(format: "Delay comp: %d smp (%.2f ms)", r.delayCompensationSamples,
-                                Double(r.delayCompensationSamples) / max(r.sampleRate, 1) * 1000))
+                    if perMic.count > 1 {
+                        Text("Delays: " + perMic.map { "\($0.delayCompensationSamples)" }.joined(separator: ", ") + " smp")
+                    } else {
+                        Text(String(format: "Delay comp: %d smp (%.2f ms)", r.delayCompensationSamples,
+                                    Double(r.delayCompensationSamples) / max(r.sampleRate, 1) * 1000))
+                    }
                     Text("Averages: \(r.averages)").foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -135,6 +146,9 @@ public struct TransferFunctionView: View {
             FrequencyPlot(yTicks: Self.magTicks.map { (value: $0.0, label: $0.1) }, yRange: -24...24) { x, y in
                 Canvas { ctx, size in
                     guard let r = result, !r.frequencies.isEmpty else { return }
+                    for m in perMic where !m.frequencies.isEmpty {
+                        drawTrace(ctx, size: size, r: m, values: m.magnitudeDB, x: x, y: y, color: .white.opacity(0.35), circular: false)
+                    }
                     drawTrace(ctx, size: size, r: r, values: r.magnitudeDB, x: x, y: y, color: .cyan, circular: false)
                 }
             }

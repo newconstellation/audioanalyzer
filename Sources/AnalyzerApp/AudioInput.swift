@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreAudio
 import AnalysisCore
 import os
 
@@ -31,6 +32,9 @@ final class AudioInput {
     private var splChannel = 0
     private var leqPeriodSeconds = 60.0
     private var calibrationOffsets: [Double?] = []
+    private var routing = ChannelRouting()
+    private var inputChannels = 2
+    private var outputAttached = false
 
     /// Shared with the real-time output thread, which only ever *tries* the
     /// lock and keeps its previous settings if it's busy.
@@ -115,6 +119,13 @@ final class AudioInput {
         lock.withLock { engine?.resetSoundLevels() }
     }
 
+    func setRouting(_ r: ChannelRouting) {
+        lock.withLock {
+            routing = r
+            engine?.routing = r
+        }
+    }
+
     func start() throws {
         let input = audioEngine.inputNode
         let format = input.outputFormat(forBus: 0)
@@ -122,18 +133,58 @@ final class AudioInput {
             throw NSError(domain: "AudioInput", code: 1, userInfo: [NSLocalizedDescriptionKey: "No input device"])
         }
         inputRate = format.sampleRate
-        lock.withLock { makeEngine(sampleRate: format.sampleRate) }
+        lock.withLock {
+            inputChannels = max(1, Int(format.channelCount))
+            if file == nil { makeEngine(sampleRate: format.sampleRate) }
+        }
         loopbackGenerator = SignalGenerator(sampleRate: format.sampleRate)
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
             self?.analyze(buffer)
         }
-        attachGeneratorOutput()
+        if !outputAttached {
+            attachGeneratorOutput()
+            outputAttached = true
+        }
         try audioEngine.start()
+    }
+
+    /// Switches the input to the named device (nil: the system default) and
+    /// restarts. Returns the new number of input channels.
+    @discardableResult
+    func selectInputDevice(named name: String?) throws -> Int {
+        audioEngine.inputNode.removeTap(onBus: 0)
+        audioEngine.stop()
+        var id: AudioDeviceID
+        if let name {
+            guard let d = AudioDevices.inputs().first(where: { $0.name == name }) else {
+                throw NSError(domain: "AudioInput", code: 5, userInfo: [NSLocalizedDescriptionKey: "\(name) isn't connected."])
+            }
+            id = d.id
+        } else {
+            var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultInputDevice,
+                                                     mScope: kAudioObjectPropertyScopeGlobal,
+                                                     mElement: kAudioObjectPropertyElementMain)
+            var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+            id = 0
+            AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &id)
+        }
+        if let unit = audioEngine.inputNode.audioUnit {
+            let status = AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0,
+                                              &id, UInt32(MemoryLayout<AudioDeviceID>.size))
+            if status != noErr {
+                throw NSError(domain: "AudioInput", code: Int(status),
+                              userInfo: [NSLocalizedDescriptionKey: "Couldn't switch input device (error \(status))."])
+            }
+        }
+        try start()
+        return lock.withLock { inputChannels }
     }
 
     /// Call with the lock held.
     private func makeEngine(sampleRate: Double) {
-        let e = AnalysisEngine(sampleRate: sampleRate, channelCount: 2, fftSize: fftSize)
+        let channels = file == nil ? max(2, inputChannels) : 2
+        let e = AnalysisEngine(sampleRate: sampleRate, channelCount: channels, fftSize: fftSize)
+        e.routing = routing
         e.octaveFraction = octaveFraction
         e.decaySettings = decaySettings
         e.splChannel = splChannel
@@ -212,7 +263,7 @@ final class AudioInput {
         } else {
             var channels = (0..<Int(buffer.format.channelCount)).map { UnsafePointer(data[$0]) }
             if channels.count == 1 { channels.append(channels[0]) } // mono input: mirror to ch 2
-            feed(Array(channels.prefix(2)), frameCount: n)
+            feed(channels, frameCount: n)
         }
         let snap = engine?.snapshot
         lock.unlock()
