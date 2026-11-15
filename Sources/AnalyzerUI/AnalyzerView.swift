@@ -72,7 +72,7 @@ public struct AnalyzerView: View {
             }
             HStack(alignment: .top, spacing: 16) {
                 LevelMetersView(levels: snapshot.levels)
-                    .frame(width: 140)
+                    .frame(width: LevelMetersView.width(channels: snapshot.levels.count))
                 FitOrScroll {
                     switch page {
                     case .meters:

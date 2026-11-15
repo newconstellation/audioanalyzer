@@ -41,6 +41,10 @@ struct RenderSnapshot {
                                                                           "Aggregate Device", "Virtual Loopback"],
                                                                   selected: .constant("16-channel Audio Interface"))),
                    to: (dir as NSString).appendingPathComponent("inputs-16.png"), size: CGSize(width: 900, height: 560))
+        // The same in a window tall enough for the whole page. (The offscreen
+        // renderer leaves scroll views blank, so this shows the page itself.)
+        try render(AnalyzerView(snapshot: manyInputs(16), page: .inputs),
+                   to: (dir as NSString).appendingPathComponent("inputs-16-tall.png"), size: CGSize(width: 1000, height: 820))
 
         for (page, name, snapshot) in pages {
             let path = (dir as NSString).appendingPathComponent("\(name).png")
