@@ -1,6 +1,6 @@
 #!/bin/bash
 # Builds the app in release mode and wraps it in a macOS .app bundle, ad-hoc
-# signed, zipped for download. Apple Silicon, macOS 14 or later.
+# signed, zipped for download. Universal (Apple Silicon and Intel), macOS 14 or later.
 #
 #     tools/package/package-app.sh [OUTPUT_DIR] [VERSION]
 #
@@ -16,8 +16,11 @@ EXECUTABLE="AudioAnalyzer"
 BUNDLE_ID="com.newconstellation.audioanalyzer"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
-swift build -c release --product AnalyzerApp
-BIN="$(swift build -c release --show-bin-path)/AnalyzerApp"
+ARCHS=(--arch arm64 --arch x86_64)
+swift build -c release "${ARCHS[@]}" --product AnalyzerApp
+BIN="$(swift build -c release "${ARCHS[@]}" --show-bin-path)/AnalyzerApp"
+lipo -info "$BIN"
+lipo "$BIN" -verify_arch arm64 x86_64
 
 APP="$OUT/$APP_NAME.app"
 rm -rf "$APP"

@@ -41,7 +41,7 @@ first time. Choose the input device on the Inputs page.
 tools/package/package-app.sh dist 0.1.0
 ```
 
-builds `dist/Audio Analyzer.app` (Apple Silicon, macOS 14+) and a zip of it.
+builds `dist/Audio Analyzer.app` (universal: Apple Silicon and Intel, macOS 14+) and a zip of it.
 CI does the same on every push and pull request and uploads the zip as the
 `AudioAnalyzer-app` artifact. The app is ad-hoc signed, not notarized: the
 first time, right-click it and choose Open (or run
