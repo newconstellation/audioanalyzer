@@ -17,14 +17,16 @@ jobs:
         run: swift build
       - name: Test
         run: swift test
-      - name: Render UI snapshot
+      - name: Render UI snapshots
         timeout-minutes: 5
         run: |
-          swift run RenderSnapshot snapshot.png
-          echo "SNAPSHOT-BASE64-BEGIN"
-          base64 -b 76 -i snapshot.png
-          echo "SNAPSHOT-BASE64-END"
+          swift run RenderSnapshot snapshots
+          for f in snapshots/*.png; do
+            echo "SNAPSHOT-BEGIN $(basename "$f")"
+            base64 -b 76 -i "$f"
+            echo "SNAPSHOT-END"
+          done
       - uses: actions/upload-artifact@v4
         with:
-          name: ui-snapshot
-          path: snapshot.png
+          name: ui-snapshots
+          path: snapshots/*.png
