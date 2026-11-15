@@ -20,6 +20,8 @@ struct RenderSnapshot {
             (.meters, "meters", analyse(metersSignal())),
             (.transferFunction, "transfer-function", analyse(transferSignal(), findDelay: true)),
             (.distortion, "thd", analyse(distortionSignal())),
+            (.scope, "scope", analyse(metersSignal())),
+            (.history, "history", analyse(historySignal())),
         ]
         for (page, name, snapshot) in pages {
             let path = (dir as NSString).appendingPathComponent("\(name).png")
@@ -92,6 +94,30 @@ struct RenderSnapshot {
             let l = tones + noiseGain * pinkL.next(rng.nextGaussian())
             left[i] = Float(l)
             right[i] = Float(0.8 * l + 0.45 * noiseGain * pinkR.next(rng.nextGaussian()))
+        }
+        return (left, right)
+    }
+
+    /// 16 s of stereo: a log sweep 20 Hz to 20 kHz at -12 dBFS over pink noise
+    /// at -40 dBFS, panned slowly left to right, with the right channel's own
+    /// noise rising halfway through so correlation falls.
+    static func historySignal() -> (left: [Float], right: [Float]) {
+        let seconds = 16.0, n = Int(seconds * fs)
+        var rng = SplitMix64(seed: 3)
+        var pinkL = PinkNoise(), pinkR = PinkNoise()
+        var left = [Float](repeating: 0, count: n), right = left
+        let noiseGain = dbToAmplitude(-40) / 0.15
+        let sweepSeconds = 14.0, k = log(20000.0 / 20.0)
+        var phase = 0.0
+        for i in 0..<n {
+            let t = Double(i) / fs
+            let f = 20 * exp(k * min(t, sweepSeconds) / sweepSeconds)
+            phase += 2 * .pi * f / fs
+            let x = dbToAmplitude(-12) * sin(phase) + noiseGain * pinkL.next(rng.nextGaussian())
+            let pan = 0.5 + 0.4 * sin(2 * .pi * t / seconds) // 0 = right, 1 = left
+            let own = t > seconds / 2 ? dbToAmplitude(-14) / 0.15 * pinkR.next(rng.nextGaussian()) : 0
+            left[i] = Float(x * pan * 1.4)
+            right[i] = Float(x * (1 - pan) * 1.4 + own)
         }
         return (left, right)
     }
