@@ -25,6 +25,22 @@ struct RenderSnapshot {
             let path = (dir as NSString).appendingPathComponent("\(name).png")
             try render(AnalyzerView(snapshot: snapshot, page: page), to: path)
         }
+
+        // Generator page: the generator's own output analysed (internal loopback).
+        var g = GeneratorSettings()
+        g.enabled = true
+        g.tones = [ToneSettings(frequency: 1000, levelDBFS: -12),
+                   ToneSettings(frequency: 20, levelDBFS: -24, sweep: Sweep(endFrequency: 20000, seconds: 10)),
+                   ToneSettings(enabled: false, frequency: 60, levelDBFS: -30)]
+            + (3..<GeneratorSettings.maxTones).map { _ in ToneSettings(enabled: false) }
+        g.pinkNoiseDBFS = -40
+        g.ditherBits = 24
+        let gen = SignalGenerator(sampleRate: fs, settings: g)
+        var out = [Float](repeating: 0, count: Int(2 * fs))
+        out.withUnsafeMutableBufferPointer { gen.render(into: $0.baseAddress!, frameCount: $0.count) }
+        try render(AnalyzerView(snapshot: analyse((out, out)), page: .generator,
+                                generator: .constant(g), loopback: .constant(true)),
+                   to: (dir as NSString).appendingPathComponent("generator.png"))
     }
 
     /// ImageRenderer draws the SwiftUI view directly, with no window or

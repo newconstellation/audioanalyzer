@@ -5,7 +5,9 @@ and Intel), written in Swift with CoreAudio, Accelerate and SwiftUI.
 
 **Status:** early. Working: level meters, FFT spectrum, stereo correlation,
 dual-channel transfer function (magnitude, phase, coherence, delay finder),
-and THD / THD+N analysis. Planned: signal generator, waterfall, oscilloscope,
+THD / THD+N analysis, and a signal generator (9 tones with sweeps, white and
+pink noise, bursts, TPDF dither, FFT-synchronous tones; plays to the output
+device or loops back internally). Planned: waterfall, oscilloscope,
 vectorscope, histories, phase vs frequency, bit meters, capture and offline
 analysis.
 

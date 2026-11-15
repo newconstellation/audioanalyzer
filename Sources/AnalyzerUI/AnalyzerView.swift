@@ -6,6 +6,7 @@ public enum InstrumentPage: String, CaseIterable, Identifiable, Sendable {
     case meters = "Meters & Spectrum"
     case transferFunction = "Transfer Function"
     case distortion = "THD"
+    case generator = "Generator"
     public var id: String { rawValue }
 }
 
@@ -15,12 +16,18 @@ public struct AnalyzerView: View {
     public var error: String?
     public var onResetPeaks: () -> Void
     public var onFindDelay: () -> Void
+    var generator: Binding<GeneratorSettings>
+    var loopback: Binding<Bool>
     @State private var page: InstrumentPage
 
     public init(snapshot: AnalyzerSnapshot, error: String? = nil, page: InstrumentPage = .meters,
+                generator: Binding<GeneratorSettings> = .constant(GeneratorSettings()),
+                loopback: Binding<Bool> = .constant(false),
                 onResetPeaks: @escaping () -> Void = {}, onFindDelay: @escaping () -> Void = {}) {
         self.snapshot = snapshot
         self.error = error
+        self.generator = generator
+        self.loopback = loopback
         self.onResetPeaks = onResetPeaks
         self.onFindDelay = onFindDelay
         _page = State(initialValue: page)
@@ -63,6 +70,8 @@ public struct AnalyzerView: View {
                         TransferFunctionView(result: snapshot.transferFunction, onFindDelay: onFindDelay)
                     case .distortion:
                         DistortionView(result: snapshot.distortion)
+                    case .generator:
+                        GeneratorView(settings: generator, loopback: loopback)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
