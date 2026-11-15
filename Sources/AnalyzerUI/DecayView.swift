@@ -194,7 +194,7 @@ struct DecayWaterfall: View {
             }
             if let last = d.timesMs.last {
                 ctx.draw(Text("0 ms").font(.system(size: 9).monospacedDigit()).foregroundStyle(.secondary),
-                         at: CGPoint(x: left + depthX + w + 4, y: h), anchor: .leading)
+                         at: CGPoint(x: left + depthX + w - 2, y: h + 8), anchor: .trailing)
                 ctx.draw(Text(String(format: "%.0f ms", last)).font(.system(size: 9).monospacedDigit()).foregroundStyle(.secondary),
                          at: CGPoint(x: left + w + 4, y: depthY + h), anchor: .leading)
             }
