@@ -21,6 +21,12 @@ struct AnalyzerMainApp: App {
                          generator: $model.generator, loopback: $model.loopback,
                          octaveFraction: $model.octaveFraction, decaySettings: $model.decaySettings,
                          sourceName: model.sourceName,
+                         splControls: SPLControls(channel: $model.splChannel, leqPeriodSeconds: $model.leqPeriodSeconds,
+                                                  calibratorLevel: $model.calibratorLevel, offsets: $model.calibrationOffsets,
+                                                  reset: { model.resetSoundLevels() },
+                                                  startCalibration: { model.startCalibration() },
+                                                  applyCalibration: { model.applyCalibration() },
+                                                  cancelCalibration: { model.cancelCalibration() }),
                          fileActions: FileActions(open: { model.openFile() }, liveInput: { model.liveInput() },
                                                   saveCapture: { model.saveCapture() }),
                          onResetPeaks: model.resetPeaks, onFindDelay: model.findDelay)
@@ -52,6 +58,37 @@ final class AnalyzerModel {
         didSet { input.setDecaySettings(decaySettings) }
     }
     var sourceName = "Input"
+    var splChannel = 0 {
+        didSet { input.setSPL(channel: splChannel, leqPeriodSeconds: leqPeriodSeconds) }
+    }
+    var leqPeriodSeconds = 60.0 {
+        didSet { input.setSPL(channel: splChannel, leqPeriodSeconds: leqPeriodSeconds) }
+    }
+    var calibratorLevel = 94.0
+    /// Per input channel, dB to add to get dB SPL. Saved between launches.
+    var calibrationOffsets: [Double?] = AnalyzerModel.loadOffsets() {
+        didSet {
+            input.setCalibrationOffsets(calibrationOffsets)
+            AnalyzerModel.saveOffsets(calibrationOffsets)
+        }
+    }
+
+    private static let offsetsKey = "calibrationOffsets"
+    private static func loadOffsets() -> [Double?] {
+        guard let data = UserDefaults.standard.data(forKey: offsetsKey),
+              let offsets = try? JSONDecoder().decode([Double?].self, from: data) else { return [] }
+        return offsets
+    }
+    private static func saveOffsets(_ offsets: [Double?]) {
+        if let data = try? JSONEncoder().encode(offsets) { UserDefaults.standard.set(data, forKey: offsetsKey) }
+    }
+
+    func startCalibration() { input.startCalibration(channel: splChannel, referenceSPL: calibratorLevel) }
+    func applyCalibration() {
+        if let offsets = input.applyCalibration() { calibrationOffsets = offsets }
+    }
+    func cancelCalibration() { input.cancelCalibration() }
+    func resetSoundLevels() { input.resetSoundLevels() }
     private let input = AudioInput()
 
     @MainActor
@@ -63,6 +100,7 @@ final class AnalyzerModel {
         }
         input.onSnapshot = { [weak self] in self?.snapshot = $0 }
         input.setGenerator(generator)
+        input.setCalibrationOffsets(calibrationOffsets)
         do { try input.start() } catch { self.error = error.localizedDescription }
     }
 

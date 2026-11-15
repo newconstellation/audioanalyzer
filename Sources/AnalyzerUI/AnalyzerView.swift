@@ -5,6 +5,7 @@ import SwiftUI
 public enum InstrumentPage: String, CaseIterable, Identifiable, Sendable {
     case meters = "Meters & Spectrum"
     case octave = "Octave"
+    case spl = "SPL"
     case transferFunction = "Transfer Function"
     case decay = "Decay"
     case distortion = "THD"
@@ -27,6 +28,7 @@ public struct AnalyzerView: View {
     /// What is being analysed, shown in the status bar ("Input", a file name...).
     public var sourceName: String
     public var fileActions: FileActions?
+    var splControls: SPLControls?
     @State private var page: InstrumentPage
 
     public init(snapshot: AnalyzerSnapshot, error: String? = nil, page: InstrumentPage = .meters,
@@ -34,7 +36,7 @@ public struct AnalyzerView: View {
                 loopback: Binding<Bool> = .constant(false),
                 octaveFraction: Binding<OctaveFraction> = .constant(.third),
                 decaySettings: Binding<DecaySettings> = .constant(DecaySettings()),
-                sourceName: String = "Input", fileActions: FileActions? = nil,
+                sourceName: String = "Input", fileActions: FileActions? = nil, splControls: SPLControls? = nil,
                 onResetPeaks: @escaping () -> Void = {}, onFindDelay: @escaping () -> Void = {}) {
         self.snapshot = snapshot
         self.error = error
@@ -44,6 +46,7 @@ public struct AnalyzerView: View {
         self.decaySettings = decaySettings
         self.sourceName = sourceName
         self.fileActions = fileActions
+        self.splControls = splControls
         self.onResetPeaks = onResetPeaks
         self.onFindDelay = onFindDelay
         _page = State(initialValue: page)
@@ -78,13 +81,19 @@ public struct AnalyzerView: View {
                             SpectrumView(averageDB: snapshot.spectrumDB,
                                          peakDB: snapshot.spectrumPeakDB,
                                          binWidth: snapshot.binWidth,
-                                         sampleRate: snapshot.sampleRate)
+                                         sampleRate: snapshot.sampleRate,
+                                         offsetDB: snapshot.calibrationOffsets.first ?? nil)
                             CorrelationBar(value: snapshot.correlation)
                                 .frame(height: 22)
                         }
                     case .octave:
                         OctaveView(bands: snapshot.octaveBands, levelsDB: snapshot.octaveDB,
                                    peaksDB: snapshot.octavePeakDB, fraction: octaveFraction)
+                    case .spl:
+                        SPLView(snapshot: snapshot,
+                                controls: splControls ?? .constant(channel: snapshot.splChannel,
+                                                                   leqPeriodSeconds: snapshot.leqPeriodSeconds,
+                                                                   offsets: snapshot.calibrationOffsets))
                     case .transferFunction:
                         TransferFunctionView(result: snapshot.transferFunction, onFindDelay: onFindDelay)
                     case .decay:

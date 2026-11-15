@@ -19,6 +19,8 @@ struct RenderSnapshot {
         let pages: [(InstrumentPage, String, AnalyzerSnapshot)] = [
             (.meters, "meters", analyse(metersSignal())),
             (.octave, "octave", analyse(metersSignal())),
+            // Calibrated as if 0 dB re FS RMS were 110 dB SPL.
+            (.spl, "spl", analyse(metersSignal()) { $0.calibrationOffsets[0] = 110 }),
             (.transferFunction, "transfer-function", analyse(transferSignal(), findDelay: true)),
             (.decay, "decay", analyse(transferSignal(resonance: true), findDelay: true)),
             (.distortion, "thd", analyse(distortionSignal())),
@@ -61,8 +63,10 @@ struct RenderSnapshot {
         print("wrote \(path) (\(cg.width)x\(cg.height))")
     }
 
-    static func analyse(_ signal: (left: [Float], right: [Float]), findDelay: Bool = false) -> AnalyzerSnapshot {
+    static func analyse(_ signal: (left: [Float], right: [Float]), findDelay: Bool = false,
+                        configure: (AnalysisEngine) -> Void = { _ in }) -> AnalyzerSnapshot {
         let engine = AnalysisEngine(sampleRate: fs, channelCount: 2)
+        configure(engine)
         func feed() {
             signal.left.withUnsafeBufferPointer { lp in
                 signal.right.withUnsafeBufferPointer { rp in

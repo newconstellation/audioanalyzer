@@ -44,25 +44,34 @@ struct LevelMetersView: View {
     }
 }
 
-/// Log-frequency spectrum: average trace and peak-hold trace.
+/// Log-frequency spectrum: average trace and peak-hold trace. With a
+/// calibration offset the scale is dB SPL (a sine reads its RMS SPL);
+/// without, dBFS (a full-scale sine reads 0).
 struct SpectrumView: View {
     let averageDB: [Double]
     let peakDB: [Double]
     let binWidth: Double
     let sampleRate: Double
+    var offsetDB: Double? = nil
 
     private let minF = 20.0
-    private let topDB = 0.0, bottomDB = -120.0
 
     var body: some View {
-        FrequencyPlot(yTicks: stride(from: 0.0, through: bottomDB, by: -20).map { (value: $0, label: "\(Int($0))") },
-                      yRange: bottomDB...topDB) { x, y in
+        // Spectrum dB are sine-referenced (peak); SPL is RMS-referenced.
+        let shift = offsetDB.map { $0 - 3.0103 } ?? 0
+        let top = offsetDB == nil ? 0.0 : (shift / 10).rounded(.up) * 10
+        let bottom = top - 120
+        FrequencyPlot(yTicks: stride(from: top, through: bottom, by: -20).map { (value: $0, label: "\(Int($0))") },
+                      yRange: bottom...top) { x, y in
             Canvas { ctx, size in
                 let xs: (Double) -> Double = { x($0, size.width) }
-                let ys: (Double) -> Double = { y($0, size.height) }
+                let ys: (Double) -> Double = { y($0 + shift, size.height) }
                 ctx.stroke(trace(peakDB, x: xs, y: ys), with: .color(.yellow.opacity(0.6)), lineWidth: 1)
                 ctx.stroke(trace(averageDB, x: xs, y: ys), with: .color(.cyan), lineWidth: 1.5)
             }
+        }
+        .overlay(alignment: .topTrailing) {
+            Text(offsetDB == nil ? "dBFS" : "dB SPL").font(.caption).foregroundStyle(.secondary).padding(4)
         }
     }
 

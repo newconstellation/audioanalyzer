@@ -3,6 +3,16 @@ import Foundation
 /// Everything the window draws, captured at one moment.
 public struct AnalyzerSnapshot: Sendable {
     public var levels: [LevelReading] = []
+    /// Per channel: A- and C-weighted sound levels, in dB re digital RMS 1.
+    public var soundLevels: [ChannelSoundLevel] = []
+    /// Per channel: dB to add to sound levels to get dB SPL, or nil if uncalibrated.
+    public var calibrationOffsets: [Double?] = []
+    public var calibration: CalibrationStatus?
+    /// History of the SPL channel's levels, oldest first, every `splHistoryStep` seconds.
+    public var splHistory: [SPLPoint] = []
+    public var splHistoryStep: Double = 0.5
+    public var splChannel = 0
+    public var leqPeriodSeconds = 60.0
     public var spectrumDB: [Double] = []
     public var spectrumPeakDB: [Double] = []
     public var binWidth: Double = 1
@@ -47,6 +57,17 @@ public final class AnalysisEngine {
     public let channelCount: Int
 
     private let meters: [LevelMeter]
+    private let soundMeters: [(a: SoundLevelMeter, c: SoundLevelMeter)]
+    /// Per channel: dB to add to sound levels to get dB SPL (nil if uncalibrated).
+    public var calibrationOffsets: [Double?]
+    /// Channel shown on the SPL page and logged in its history.
+    public var splChannel = 0
+    public var leqPeriodSeconds = 60.0 {
+        didSet { for m in soundMeters { m.a.leqPeriodSeconds = leqPeriodSeconds; m.c.leqPeriodSeconds = leqPeriodSeconds } }
+    }
+    private var calibrator: (channel: Int, cal: LevelCalibrator)?
+    private var splHistory = History<SPLPoint>(capacity: 1200)
+    private var splHistoryCounter = 0
     private let correlationMeter: CorrelationMeter?
     private let analyzer: SpectrumAnalyzer?
     private var averager = SpectrumAverager(mode: .exponential(seconds: 0.3))
@@ -91,6 +112,10 @@ public final class AnalysisEngine {
         self.sampleRate = sampleRate
         self.channelCount = channelCount
         meters = (0..<channelCount).map { _ in LevelMeter(sampleRate: sampleRate) }
+        soundMeters = (0..<channelCount).map { _ in
+            (SoundLevelMeter(sampleRate: sampleRate, weighting: .a), SoundLevelMeter(sampleRate: sampleRate, weighting: .c))
+        }
+        calibrationOffsets = Array(repeating: nil, count: channelCount)
         correlationMeter = channelCount >= 2 ? CorrelationMeter(sampleRate: sampleRate) : nil
         analyzer = SpectrumAnalyzer(fftSize: fftSize, window: .hann, sampleRate: sampleRate)
         transferFunction = channelCount >= 2 ? TransferFunctionAnalyzer(sampleRate: sampleRate) : nil
@@ -108,7 +133,13 @@ public final class AnalysisEngine {
     public func process(channels: [UnsafePointer<Float>], frameCount n: Int) {
         guard n > 0 else { return }
         for (c, meter) in meters.enumerated() where c < channels.count {
-            meter.process(UnsafeBufferPointer(start: channels[c], count: n))
+            let buf = UnsafeBufferPointer(start: channels[c], count: n)
+            meter.process(buf)
+            soundMeters[c].a.process(buf)
+            soundMeters[c].c.process(buf)
+        }
+        if let cal = calibrator, cal.channel < channels.count {
+            cal.cal.process(UnsafeBufferPointer(start: channels[cal.channel], count: n))
         }
         if channels.count >= 2 {
             let left = UnsafeBufferPointer(start: channels[0], count: n)
@@ -166,6 +197,12 @@ public final class AnalysisEngine {
             stepSquares[c] = 0
         }
         stepSamples = 0
+        splHistoryCounter += 1
+        if splHistoryCounter >= 10, splChannel < soundMeters.count { // every 10 steps (0.5 s)
+            splHistoryCounter = 0
+            let a = soundMeters[splChannel].a.reading, c = soundMeters[splChannel].c.reading
+            splHistory.append(SPLPoint(laSlow: a.slow, lcSlow: c.slow, laeq: a.periodLeq))
+        }
         if let corr = correlationMeter {
             correlationHistory.append(corr.correlation)
             balanceHistory.append(corr.balance)
@@ -178,6 +215,16 @@ public final class AnalysisEngine {
     public var snapshot: AnalyzerSnapshot {
         var s = AnalyzerSnapshot()
         s.levels = meters.map(\.reading)
+        s.soundLevels = soundMeters.map { ChannelSoundLevel(a: $0.a.reading, c: $0.c.reading) }
+        s.calibrationOffsets = calibrationOffsets
+        if let c = calibrator {
+            s.calibration = CalibrationStatus(channel: c.channel, referenceSPL: c.cal.referenceSPL, progress: c.cal.progress,
+                                              measuredDB: c.cal.measuredDB, offset: c.cal.offset)
+        }
+        s.splHistory = splHistory.values
+        s.splHistoryStep = historyStep * 10
+        s.splChannel = splChannel
+        s.leqPeriodSeconds = leqPeriodSeconds
         s.spectrumDB = averager.averageDB
         s.spectrumPeakDB = averager.peakDB
         s.binWidth = analyzer?.binWidth ?? 1
@@ -217,6 +264,30 @@ public final class AnalysisEngine {
         latestImpulse = nil
         latestDecay = nil
         return tf.delayCompensation
+    }
+
+    /// Starts measuring a calibrator on `channel`. Watch `snapshot.calibration`
+    /// for progress and the resulting offset, then `applyCalibration()`.
+    public func startCalibration(channel: Int, referenceSPL: Double, seconds: Double = 3) {
+        guard channel >= 0, channel < channelCount else { return }
+        calibrator = (channel, LevelCalibrator(sampleRate: sampleRate, referenceSPL: referenceSPL, seconds: seconds))
+    }
+
+    /// Stores the finished calibration's offset for its channel and returns it.
+    @discardableResult
+    public func applyCalibration() -> (channel: Int, offset: Double)? {
+        defer { calibrator = nil }
+        guard let c = calibrator, let offset = c.cal.offset else { return nil }
+        calibrationOffsets[c.channel] = offset
+        return (c.channel, offset)
+    }
+
+    public func cancelCalibration() { calibrator = nil }
+
+    /// Restarts Leq, maxima and peaks of the sound level meters.
+    public func resetSoundLevels() {
+        for m in soundMeters { m.a.reset(); m.c.reset() }
+        splHistory.removeAll()
     }
 
     public func resetPeaks() {

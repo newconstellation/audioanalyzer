@@ -28,6 +28,9 @@ final class AudioInput {
     private var inputRate = 0.0
     private var octaveFraction = OctaveFraction.third
     private var decaySettings = DecaySettings()
+    private var splChannel = 0
+    private var leqPeriodSeconds = 60.0
+    private var calibrationOffsets: [Double?] = []
 
     /// Shared with the real-time output thread, which only ever *tries* the
     /// lock and keeps its previous settings if it's busy.
@@ -67,6 +70,51 @@ final class AudioInput {
         }
     }
 
+    func setSPL(channel: Int, leqPeriodSeconds: Double) {
+        lock.withLock {
+            splChannel = channel
+            self.leqPeriodSeconds = leqPeriodSeconds
+            engine?.splChannel = channel
+            engine?.leqPeriodSeconds = leqPeriodSeconds
+        }
+    }
+
+    func setCalibrationOffsets(_ offsets: [Double?]) {
+        lock.withLock {
+            calibrationOffsets = offsets
+            applyOffsets()
+        }
+    }
+
+    /// Call with the lock held.
+    private func applyOffsets() {
+        guard let e = engine else { return }
+        for c in 0..<e.channelCount {
+            e.calibrationOffsets[c] = c < calibrationOffsets.count ? calibrationOffsets[c] : nil
+        }
+    }
+
+    func startCalibration(channel: Int, referenceSPL: Double) {
+        lock.withLock { engine?.startCalibration(channel: channel, referenceSPL: referenceSPL) }
+    }
+
+    /// Stores the finished calibration in the engine and returns all offsets.
+    func applyCalibration() -> [Double?]? {
+        lock.withLock {
+            guard let e = engine, e.applyCalibration() != nil else { return nil }
+            calibrationOffsets = e.calibrationOffsets
+            return calibrationOffsets
+        }
+    }
+
+    func cancelCalibration() {
+        lock.withLock { engine?.cancelCalibration() }
+    }
+
+    func resetSoundLevels() {
+        lock.withLock { engine?.resetSoundLevels() }
+    }
+
     func start() throws {
         let input = audioEngine.inputNode
         let format = input.outputFormat(forBus: 0)
@@ -88,7 +136,10 @@ final class AudioInput {
         let e = AnalysisEngine(sampleRate: sampleRate, channelCount: 2, fftSize: fftSize)
         e.octaveFraction = octaveFraction
         e.decaySettings = decaySettings
+        e.splChannel = splChannel
+        e.leqPeriodSeconds = leqPeriodSeconds
         engine = e
+        applyOffsets()
         capture = CaptureRing(channels: 2, capacity: Int(Self.captureSeconds * sampleRate))
     }
 
