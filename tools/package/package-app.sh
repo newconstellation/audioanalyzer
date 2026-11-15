@@ -5,15 +5,15 @@
 #     tools/package/package-app.sh [OUTPUT_DIR] [VERSION]
 #
 # Without a Developer ID signature macOS warns on first launch: right-click
-# the app and choose Open, or run `xattr -dr com.apple.quarantine "Audio Analyzer.app"`.
+# the app and choose Open, or run `xattr -dr com.apple.quarantine "Acoustic Studio Tools.app"`.
 set -euo pipefail
 
 OUT="${1:-dist}"
 VERSION="${2:-0.1.0}"
 BUILD_NUMBER="${GITHUB_RUN_NUMBER:-1}"
-APP_NAME="Audio Analyzer"
-EXECUTABLE="AudioAnalyzer"
-BUNDLE_ID="com.newconstellation.audioanalyzer"
+APP_NAME="Acoustic Studio Tools"
+EXECUTABLE="AcousticStudioTools"
+BUNDLE_ID="com.newconstellation.acousticstudiotools"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 ARCHS=(--arch arm64 --arch x86_64)
@@ -31,8 +31,8 @@ sed -e "s/__NAME__/$APP_NAME/g" -e "s/__EXECUTABLE__/$EXECUTABLE/g" -e "s/__BUND
     "$HERE/Info.plist" > "$APP/Contents/Info.plist"
 plutil -lint "$APP/Contents/Info.plist"
 
-codesign --force --sign - --entitlements "$HERE/AudioAnalyzer.entitlements" --timestamp=none "$APP"
+codesign --force --sign - --entitlements "$HERE/AcousticStudioTools.entitlements" --timestamp=none "$APP"
 codesign --verify --verbose "$APP"
 
-(cd "$OUT" && ditto -c -k --keepParent "$APP_NAME.app" "AudioAnalyzer-$VERSION-$BUILD_NUMBER.zip")
-echo "Built $OUT/AudioAnalyzer-$VERSION-$BUILD_NUMBER.zip"
+(cd "$OUT" && ditto -c -k --keepParent "$APP_NAME.app" "AcousticStudioTools-$VERSION-$BUILD_NUMBER.zip")
+echo "Built $OUT/AcousticStudioTools-$VERSION-$BUILD_NUMBER.zip"

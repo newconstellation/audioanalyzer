@@ -16,7 +16,7 @@ struct AnalyzerMainApp: App {
     }
 
     var body: some Scene {
-        WindowGroup("Analyzer") {
+        WindowGroup("Acoustic Studio Tools") {
             AnalyzerView(snapshot: model.snapshot, error: model.error,
                          generator: $model.generator, loopback: $model.loopback,
                          octaveFraction: $model.octaveFraction, decaySettings: $model.decaySettings,
