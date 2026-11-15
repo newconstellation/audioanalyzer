@@ -1,15 +1,14 @@
-# Audio Analyzer
+# Acoustic Studio Tools
 
 A native real-time audio measurement app for current macOS (Apple Silicon
 and Intel), written in Swift with CoreAudio, Accelerate and SwiftUI.
 
-**Status:** early. Working: level meters, FFT spectrum, stereo correlation,
-dual-channel transfer function (magnitude, phase, coherence, delay finder),
-THD / THD+N analysis, and a signal generator (9 tones with sweeps, white and
-pink noise, bursts, TPDF dither, FFT-synchronous tones; plays to the output
-device or loops back internally). Planned: waterfall, oscilloscope,
-vectorscope, histories, phase vs frequency, bit meters, capture and offline
-analysis.
+**Status:** early, not yet tested on real hardware. Working: level meters,
+FFT spectrum, fractional-octave bands, SPL meter with calibrator, multi-input
+averaging, dual-channel transfer function (magnitude, phase, coherence, polar
+phase, delay finder), impulse response and decay waterfall, THD / THD+N,
+oscilloscope, vectorscope, spectrogram, histories, signal generator, file
+analysis and capture. Planned: bit meters, presets and more.
 
 ## Layout
 
@@ -41,8 +40,8 @@ first time. Choose the input device on the Inputs page.
 tools/package/package-app.sh dist 0.1.0
 ```
 
-builds `dist/Audio Analyzer.app` (universal: Apple Silicon and Intel, macOS 14+) and a zip of it.
+builds `dist/Acoustic Studio Tools.app` (universal: Apple Silicon and Intel, macOS 14+) and a zip of it.
 CI does the same on every push and pull request and uploads the zip as the
-`AudioAnalyzer-app` artifact. The app is ad-hoc signed, not notarized: the
+`AcousticStudioTools-app` artifact. The app is ad-hoc signed, not notarized: the
 first time, right-click it and choose Open (or run
-`xattr -dr com.apple.quarantine "Audio Analyzer.app"`).
+`xattr -dr com.apple.quarantine "Acoustic Studio Tools.app"`).
