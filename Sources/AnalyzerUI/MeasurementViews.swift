@@ -261,6 +261,7 @@ public struct DistortionView: View {
                     HarmonicBars(harmonicsDBc: r.harmonicsDBc)
                         .frame(width: 220)
                 }
+                .frame(minHeight: 220)
             } else {
                 Text("Feed a single tone into channel 1 to measure distortion.")
                     .foregroundStyle(.secondary)

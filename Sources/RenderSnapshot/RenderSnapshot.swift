@@ -34,6 +34,17 @@ struct RenderSnapshot {
         try render(AnalyzerView(snapshot: multi, page: .inputs,
                                 inputDevices: InputDeviceControls(names: ["USB Audio Interface"], selected: .constant("USB Audio Interface"))),
                    to: (dir as NSString).appendingPathComponent("inputs.png"))
+        // A 16-input interface in the smallest window: the page scrolls and the
+        // tab bar and status bar stay on screen.
+        try render(AnalyzerView(snapshot: manyInputs(16), page: .inputs,
+                                inputDevices: InputDeviceControls(names: ["16-channel Audio Interface", "Built-in Microphone",
+                                                                          "Aggregate Device", "Virtual Loopback"],
+                                                                  selected: .constant("16-channel Audio Interface"))),
+                   to: (dir as NSString).appendingPathComponent("inputs-16.png"), size: CGSize(width: 900, height: 560))
+        // The same in a window tall enough for the whole page. (The offscreen
+        // renderer leaves scroll views blank, so this shows the page itself.)
+        try render(AnalyzerView(snapshot: manyInputs(16), page: .inputs),
+                   to: (dir as NSString).appendingPathComponent("inputs-16-tall.png"), size: CGSize(width: 1000, height: 820))
 
         for (page, name, snapshot) in pages {
             let path = (dir as NSString).appendingPathComponent("\(name).png")
@@ -61,8 +72,8 @@ struct RenderSnapshot {
     /// ImageRenderer draws the SwiftUI view directly, with no window or
     /// window server, so it can't hang on a headless CI machine.
     @MainActor
-    static func render(_ view: AnalyzerView, to path: String) throws {
-        let renderer = ImageRenderer(content: view.frame(width: 1000, height: 640))
+    static func render(_ view: AnalyzerView, to path: String, size: CGSize = CGSize(width: 1000, height: 640)) throws {
+        let renderer = ImageRenderer(content: view.frame(width: size.width, height: size.height))
         renderer.scale = 2
         guard let cg = renderer.cgImage,
               let png = NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:])
@@ -91,6 +102,28 @@ struct RenderSnapshot {
         if findDelay {
             engine.findAndApplyDelay()
             feed()
+        }
+        return engine.snapshot
+    }
+
+    /// Half a second of noise at falling levels on each of `count` inputs.
+    static func manyInputs(_ count: Int) -> AnalyzerSnapshot {
+        let engine = AnalysisEngine(sampleRate: fs, channelCount: count)
+        var rng = SplitMix64(seed: 5)
+        let n = Int(0.5 * fs)
+        // Channel c occupies samples c*n ..< (c+1)*n.
+        var flat = [Float](repeating: 0, count: count * n)
+        for c in 0..<count {
+            let a = dbToAmplitude(-6 - 3 * Double(c))
+            for j in 0..<n { flat[c * n + j] = Float(a * 0.3 * rng.nextGaussian()) }
+        }
+        flat.withUnsafeBufferPointer { p in
+            var i = 0
+            while i < n {
+                let len = min(1024, n - i)
+                engine.process(channels: (0..<count).map { p.baseAddress! + $0 * n + i }, frameCount: len)
+                i += len
+            }
         }
         return engine.snapshot
     }

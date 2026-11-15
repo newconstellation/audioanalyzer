@@ -15,12 +15,22 @@ private func levelColor(_ db: Double) -> Color {
 struct LevelMetersView: View {
     let levels: [LevelReading]
 
+    /// Up to four inputs show their peak and RMS readouts; more inputs get
+    /// thin meters with just the input number, so every input fits.
+    private var compact: Bool { levels.count > 4 }
+
+    /// The width the meter column needs for `count` inputs.
+    static func width(channels count: Int) -> CGFloat {
+        count <= 4 ? 140 : min(max(140, CGFloat(count) * 14), 260)
+    }
+
     var body: some View {
-        HStack(alignment: .bottom, spacing: 10) {
-            ForEach(Array(levels.prefix(8).enumerated()), id: \.offset) { index, r in
-                VStack(spacing: 4) {
-                    Text(r.overs > 0 ? "OVER \(r.overs)" : " ")
+        HStack(alignment: .bottom, spacing: compact ? 3 : 10) {
+            ForEach(Array(levels.enumerated()), id: \.offset) { index, r in
+                VStack(spacing: compact ? 2 : 4) {
+                    Text(r.overs > 0 ? (compact ? "!" : "OVER \(r.overs)") : " ")
                         .font(.system(size: 9, weight: .bold)).foregroundStyle(.red)
+                        .lineLimit(1)
                     Canvas { ctx, size in
                         let h = size.height
                         ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.gray.opacity(0.15)))
@@ -33,11 +43,14 @@ struct LevelMetersView: View {
                         let holdY = h - h * meterFraction(r.heldPeakDB)
                         ctx.fill(Path(CGRect(x: 0, y: holdY - 1, width: size.width * 0.55, height: 2)), with: .color(.white))
                     }
-                    Text(String(format: "%.1f", max(r.heldPeakDB, -99)))
-                        .font(.system(size: 10).monospacedDigit())
-                    Text(String(format: "%.1f", max(r.rmsDB, -99)))
-                        .font(.system(size: 10).monospacedDigit()).foregroundStyle(.purple)
-                    Text("\(index + 1)").font(.caption2).foregroundStyle(.secondary)
+                    if !compact {
+                        Text(String(format: "%.1f", max(r.heldPeakDB, -99)))
+                            .font(.system(size: 10).monospacedDigit())
+                        Text(String(format: "%.1f", max(r.rmsDB, -99)))
+                            .font(.system(size: 10).monospacedDigit()).foregroundStyle(.purple)
+                    }
+                    Text("\(index + 1)").font(.system(size: compact ? 8 : 10)).foregroundStyle(.secondary)
+                        .lineLimit(1).minimumScaleFactor(0.5)
                 }
             }
         }

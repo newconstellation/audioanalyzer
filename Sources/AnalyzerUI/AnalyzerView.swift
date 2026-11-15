@@ -60,27 +60,20 @@ public struct AnalyzerView: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Tabs drawn in SwiftUI (not native AppKit controls) so offscreen
-            // snapshots render them too.
-            HStack(spacing: 4) {
-                ForEach(InstrumentPage.allCases) { p in
-                    Button { page = p } label: {
-                        Text(p.rawValue)
-                            .padding(.horizontal, 12).padding(.vertical, 5)
-                            .background(RoundedRectangle(cornerRadius: 5)
-                                .fill(page == p ? Color.accentColor.opacity(0.8) : Color.white.opacity(0.08)))
-                    }
-                    .buttonStyle(.plain)
-                }
-                Spacer()
+            // Scrolls sideways only if the window is too narrow for every tab.
+            ViewThatFits(in: .horizontal) {
+                tabs
+                ScrollView(.horizontal, showsIndicators: false) { tabs }
             }
+            .fixedSize(horizontal: false, vertical: true)
+            .layoutPriority(1)
             if let error {
                 Text(error).foregroundStyle(.red)
             }
             HStack(alignment: .top, spacing: 16) {
                 LevelMetersView(levels: snapshot.levels)
-                    .frame(width: 140)
-                Group {
+                    .frame(width: LevelMetersView.width(channels: snapshot.levels.count))
+                FitOrScroll {
                     switch page {
                     case .meters:
                         VStack(spacing: 12) {
@@ -128,6 +121,10 @@ public struct AnalyzerView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            // The page area can always shrink, so the tab bar and status bar
+            // stay on screen however much a page holds.
+            .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .top)
+            .clipped()
             HStack {
                 Text(snapshot.sampleRate > 0 ? "\(sourceName), \(Int(snapshot.sampleRate)) Hz" : "No input")
                     .foregroundStyle(.secondary)
@@ -142,11 +139,46 @@ public struct AnalyzerView: View {
                 PlainButton(title: "Reset peaks", action: onResetPeaks)
                     .keyboardShortcut("r")
             }
+            .fixedSize(horizontal: false, vertical: true)
+            .layoutPriority(1)
         }
         .padding(16)
         .foregroundStyle(.white)
         .background(Color.black)
         .environment(\.colorScheme, .dark)
+    }
+}
+
+extension AnalyzerView {
+    // Tabs drawn in SwiftUI (not native AppKit controls) so offscreen
+    // snapshots render them too.
+    private var tabs: some View {
+        HStack(spacing: 4) {
+            ForEach(InstrumentPage.allCases) { p in
+                Button { page = p } label: {
+                    Text(p.rawValue)
+                        .padding(.horizontal, 12).padding(.vertical, 5)
+                        .background(RoundedRectangle(cornerRadius: 5)
+                            .fill(page == p ? Color.accentColor.opacity(0.8) : Color.white.opacity(0.08)))
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+/// Shows a page as it is when it fits the height it is given, and in a
+/// vertical scroll view when it does not (many inputs, a short window).
+struct FitOrScroll<Content: View>: View {
+    @ViewBuilder var content: Content
+    var body: some View {
+        ViewThatFits(in: .vertical) {
+            content
+            ScrollView(.vertical) {
+                content.padding(.trailing, 10)
+            }
+        }
     }
 }
 

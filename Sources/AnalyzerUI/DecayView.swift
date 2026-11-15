@@ -41,6 +41,7 @@ public struct DecayView: View {
                 }
             }
             DecayWaterfall(decay: decay)
+                .frame(minHeight: 220)
         }
     }
 }

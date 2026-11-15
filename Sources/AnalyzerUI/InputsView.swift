@@ -34,11 +34,10 @@ public struct InputsView: View {
             if let devices {
                 HStack(spacing: 6) {
                     Text("Input device").foregroundStyle(.secondary)
-                    Chip(title: "System default", selected: devices.selected.wrappedValue == nil) { devices.selected.wrappedValue = nil }
-                    ForEach(devices.names, id: \.self) { name in
-                        Chip(title: name, selected: devices.selected.wrappedValue == name) { devices.selected.wrappedValue = name }
+                    ViewThatFits(in: .horizontal) {
+                        deviceChips(devices)
+                        ScrollView(.horizontal, showsIndicators: false) { deviceChips(devices) }
                     }
-                    Spacer()
                 }
             }
 
@@ -98,6 +97,16 @@ public struct InputsView: View {
             .padding(10)
             .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.05)))
             Spacer()
+        }
+    }
+
+    private func deviceChips(_ devices: InputDeviceControls) -> some View {
+        HStack(spacing: 6) {
+            Chip(title: "System default", selected: devices.selected.wrappedValue == nil) { devices.selected.wrappedValue = nil }
+            ForEach(devices.names, id: \.self) { name in
+                Chip(title: name, selected: devices.selected.wrappedValue == name) { devices.selected.wrappedValue = name }
+            }
+            Spacer(minLength: 0)
         }
     }
 

@@ -87,7 +87,7 @@ public struct SPLView: View {
                 .font(.caption).foregroundStyle(.secondary)
             SPLHistoryPlot(points: snapshot.splHistory, offset: offset ?? 0, calibrated: offset != nil,
                            step: snapshot.splHistoryStep)
-                .frame(maxHeight: .infinity)
+                .frame(minHeight: 160, maxHeight: .infinity)
 
             calibrationPanel
         }
