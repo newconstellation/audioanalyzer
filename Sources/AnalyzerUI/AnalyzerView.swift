@@ -6,6 +6,8 @@ public enum InstrumentPage: String, CaseIterable, Identifiable, Sendable {
     case meters = "Meters & Spectrum"
     case transferFunction = "Transfer Function"
     case distortion = "THD"
+    case scope = "Scope"
+    case history = "Waterfall & History"
     case generator = "Generator"
     public var id: String { rawValue }
 }
@@ -70,6 +72,19 @@ public struct AnalyzerView: View {
                         TransferFunctionView(result: snapshot.transferFunction, onFindDelay: onFindDelay)
                     case .distortion:
                         DistortionView(result: snapshot.distortion)
+                    case .scope:
+                        HStack(alignment: .top, spacing: 12) {
+                            OscilloscopeView(trace: snapshot.scope, settings: snapshot.scopeSettings)
+                            VectorscopeView(left: snapshot.vectorscope.left, right: snapshot.vectorscope.right,
+                                            correlation: snapshot.correlation)
+                                .frame(width: 260)
+                        }
+                    case .history:
+                        VStack(spacing: 12) {
+                            WaterfallView(rows: snapshot.waterfall, rowSeconds: snapshot.historyStep)
+                            HistoriesView(snapshot: snapshot)
+                                .frame(height: 230)
+                        }
                     case .generator:
                         GeneratorView(settings: generator, loopback: loopback)
                     }

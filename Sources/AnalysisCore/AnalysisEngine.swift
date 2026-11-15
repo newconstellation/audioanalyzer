@@ -11,6 +11,18 @@ public struct AnalyzerSnapshot: Sendable {
     public var sampleRate: Double = 0
     public var transferFunction: TransferFunctionResult?
     public var distortion: DistortionResult?
+    public var scope = ScopeTrace()
+    public var scopeSettings = ScopeSettings()
+    /// Recent channel 1 / channel 2 sample pairs for the vectorscope.
+    public var vectorscope: (left: [Float], right: [Float]) = ([], [])
+    /// Waterfall rows, oldest first; each is `waterfallColumns` log-spaced columns, 20 Hz to 20 kHz, in dBFS.
+    public var waterfall: [[Float]] = []
+    public var correlationHistory: [Double] = []
+    public var balanceHistory: [Double] = []
+    /// Per channel: peak and RMS per history step.
+    public var powerHistory: [[PowerPoint]] = []
+    /// Seconds between history points (and waterfall rows).
+    public var historyStep: Double = 0
 
     public init() {}
 }
@@ -39,6 +51,21 @@ public final class AnalysisEngine {
     /// How often the distortion analysis is refreshed, in seconds.
     public var distortionInterval = 0.1
 
+    // Time-domain instruments and histories.
+    public var scopeSettings = ScopeSettings()
+    public static let waterfallColumns = 400
+    /// Seconds between history points.
+    public let historyStep = 0.05
+    private var scopeBuffers: [[Float]]
+    private let scopeBufferLength: Int
+    private var lastSpectrum: [Double] = []
+    private var waterfall = History<[Float]>(capacity: 300)
+    private var correlationHistory = History<Double>(capacity: 600)
+    private var balanceHistory = History<Double>(capacity: 600)
+    private var powerHistory: [History<PowerPoint>]
+    private var stepPeak: [Float], stepSquares: [Double]
+    private var stepSamples = 0
+
     public init(sampleRate: Double, channelCount: Int, fftSize: Int = 8192) {
         self.sampleRate = sampleRate
         self.channelCount = channelCount
@@ -48,6 +75,12 @@ public final class AnalysisEngine {
         transferFunction = channelCount >= 2 ? TransferFunctionAnalyzer(sampleRate: sampleRate) : nil
         distortionAnalyzer = DistortionAnalyzer(sampleRate: sampleRate)
         historyLength = max(fftSize, distortionAnalyzer?.fftSize ?? 0)
+        let scopeChannels = min(2, max(1, channelCount))
+        scopeBufferLength = Int(sampleRate / 2)
+        scopeBuffers = Array(repeating: [], count: scopeChannels)
+        powerHistory = Array(repeating: History(capacity: 600), count: scopeChannels)
+        stepPeak = Array(repeating: 0, count: scopeChannels)
+        stepSquares = Array(repeating: 0, count: scopeChannels)
     }
 
     /// `channels[c]` points at `frameCount` samples for channel `c`.
@@ -70,12 +103,44 @@ public final class AnalysisEngine {
         if let analyzer, history.count >= analyzer.fftSize {
             let spectrum = history.withUnsafeBufferPointer { analyzer.spectrumDB($0) }
             averager.add(spectrum, updateInterval: Double(n) / sampleRate)
+            lastSpectrum = spectrum
         }
         samplesSinceDistortion += n
         if let distortionAnalyzer, history.count >= distortionAnalyzer.fftSize,
            Double(samplesSinceDistortion) >= distortionInterval * sampleRate {
             samplesSinceDistortion = 0
             latestDistortion = history.withUnsafeBufferPointer { distortionAnalyzer.analyze($0) }
+        }
+        updateTimeDomain(channels: channels, frameCount: n)
+    }
+
+    private func updateTimeDomain(channels: [UnsafePointer<Float>], frameCount n: Int) {
+        for c in scopeBuffers.indices {
+            let src = UnsafeBufferPointer(start: channels[min(c, channels.count - 1)], count: n)
+            scopeBuffers[c].append(contentsOf: src)
+            if scopeBuffers[c].count > scopeBufferLength {
+                scopeBuffers[c].removeFirst(scopeBuffers[c].count - scopeBufferLength)
+            }
+            for v in src {
+                stepPeak[c] = max(stepPeak[c], abs(v))
+                stepSquares[c] += Double(v) * Double(v)
+            }
+        }
+        stepSamples += n
+        guard Double(stepSamples) >= historyStep * sampleRate else { return }
+        for c in scopeBuffers.indices {
+            powerHistory[c].append(PowerPoint(peakDB: amplitudeToDB(Double(stepPeak[c])),
+                                              rmsDB: powerToDB(stepSquares[c] / Double(stepSamples))))
+            stepPeak[c] = 0
+            stepSquares[c] = 0
+        }
+        stepSamples = 0
+        if let corr = correlationMeter {
+            correlationHistory.append(corr.correlation)
+            balanceHistory.append(corr.balance)
+        }
+        if let analyzer, !lastSpectrum.isEmpty {
+            waterfall.append(logReduce(lastSpectrum, binWidth: analyzer.binWidth, columns: Self.waterfallColumns))
         }
     }
 
@@ -90,6 +155,15 @@ public final class AnalysisEngine {
         s.sampleRate = sampleRate
         s.transferFunction = transferFunction?.result
         s.distortion = latestDistortion
+        s.scope = captureScope(scopeBuffers, settings: scopeSettings, sampleRate: sampleRate)
+        s.scopeSettings = scopeSettings
+        let vs = min(2048, scopeBuffers[0].count)
+        s.vectorscope = (Array(scopeBuffers[0].suffix(vs)), Array(scopeBuffers[scopeBuffers.count - 1].suffix(vs)))
+        s.waterfall = waterfall.values
+        s.correlationHistory = correlationHistory.values
+        s.balanceHistory = balanceHistory.values
+        s.powerHistory = powerHistory.map(\.values)
+        s.historyStep = historyStep
         return s
     }
 
@@ -108,5 +182,9 @@ public final class AnalysisEngine {
         correlationMeter?.reset()
         averager.reset()
         transferFunction?.resetAverages()
+        waterfall.removeAll()
+        correlationHistory.removeAll()
+        balanceHistory.removeAll()
+        for i in powerHistory.indices { powerHistory[i].removeAll() }
     }
 }
