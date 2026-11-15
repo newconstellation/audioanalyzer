@@ -103,6 +103,21 @@ public struct TransferFunctionView: View {
     private static let phaseTicks: [(Double, String)] = stride(from: 180.0, through: -180, by: -90).map { ($0, "\(Int($0))°") }
 
     public var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            plots
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Phase vs frequency (polar)").font(.caption).foregroundStyle(.secondary)
+                PolarPhaseView(result: result)
+                    .aspectRatio(1, contentMode: .fit)
+                Text("Angle: phase. Radius: 20 Hz (centre) to 20 kHz. Colour: magnitude. Faint: low coherence.")
+                    .font(.system(size: 9)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(width: 230)
+        }
+    }
+
+    private var plots: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 16) {
                 Text("Source: ch 1   Response: ch 2").foregroundStyle(.secondary)
