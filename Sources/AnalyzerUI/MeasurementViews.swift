@@ -264,16 +264,18 @@ struct HarmonicBars: View {
             Canvas { ctx, size in
                 ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.gray.opacity(0.1)))
                 guard !harmonicsDBc.isEmpty else { return }
+                let labelBand = 14.0
+                let plotH = size.height - labelBand
                 let slot = size.width / Double(harmonicsDBc.count)
                 for (i, db) in harmonicsDBc.enumerated() {
-                    let frac = max(0, min(1, (db + 160) / 160))
-                    let h = size.height * frac
-                    ctx.fill(Path(CGRect(x: Double(i) * slot + slot * 0.2, y: size.height - h, width: slot * 0.6, height: h)),
+                    let cx = Double(i) * slot + slot / 2
+                    let h = plotH * max(0, min(1, (db + 160) / 160))
+                    ctx.fill(Path(CGRect(x: cx - slot * 0.3, y: plotH - h, width: slot * 0.6, height: h)),
                              with: .color(.yellow))
-                    ctx.draw(Text("H\(i + 2)").font(.system(size: 8)).foregroundStyle(.secondary),
-                             at: CGPoint(x: Double(i) * slot + slot / 2, y: size.height - 6))
                     ctx.draw(Text(String(format: "%.0f", db)).font(.system(size: 8).monospacedDigit()),
-                             at: CGPoint(x: Double(i) * slot + slot / 2, y: max(8, size.height - h - 8)))
+                             at: CGPoint(x: cx, y: max(6, plotH - h - 7)))
+                    ctx.draw(Text("H\(i + 2)").font(.system(size: 9)).foregroundStyle(.secondary),
+                             at: CGPoint(x: cx, y: size.height - labelBand / 2))
                 }
             }
         }
