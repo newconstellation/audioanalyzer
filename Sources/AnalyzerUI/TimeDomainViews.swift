@@ -14,17 +14,17 @@ public struct OscilloscopeView: View {
         self.settings = settings
     }
 
-    static let colors: [Color] = [.green, .orange]
+    static let colors: [Color] = Theme.series
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text("Oscilloscope").font(.caption).foregroundStyle(.secondary)
+                SectionLabel("Oscilloscope")
                 Spacer()
-                Text(caption).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                Text(caption).font(Theme.readout(10)).foregroundStyle(Theme.textSecondary)
             }
             Canvas { ctx, size in
-                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.gray.opacity(0.1)))
+                ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Theme.panel))
                 var grid = Path()
                 for i in 1..<10 {
                     let x = size.width * Double(i) / 10
@@ -34,17 +34,17 @@ public struct OscilloscopeView: View {
                     let y = size.height * Double(i) / 8
                     grid.move(to: CGPoint(x: 0, y: y)); grid.addLine(to: CGPoint(x: size.width, y: y))
                 }
-                ctx.stroke(grid, with: .color(.white.opacity(0.12)), lineWidth: 0.5)
+                ctx.stroke(grid, with: .color(Theme.grid.opacity(0.8)), lineWidth: 0.5)
                 let yOf = { (v: Double) -> Double in Double(size.height) / 2 * (1 - min(max(v, -1.05), 1.05)) }
                 if let t = trace.triggerIndex, let len = trace.channels.first?.count, len > 1 {
                     let x = size.width * Double(t) / Double(len - 1)
                     var marker = Path()
                     marker.move(to: CGPoint(x: x, y: 0)); marker.addLine(to: CGPoint(x: x, y: size.height))
-                    ctx.stroke(marker, with: .color(.yellow.opacity(0.4)), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                    ctx.stroke(marker, with: .color(Theme.warning.opacity(0.45)), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
                     var level = Path()
                     let y = yOf(settings.level)
                     level.move(to: CGPoint(x: 0, y: y)); level.addLine(to: CGPoint(x: size.width, y: y))
-                    ctx.stroke(level, with: .color(.yellow.opacity(0.25)), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                    ctx.stroke(level, with: .color(Theme.warning.opacity(0.3)), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
                 }
                 for (c, samples) in trace.channels.enumerated().reversed() where samples.count > 1 {
                     ctx.stroke(polyline(samples, width: size.width, y: yOf),
@@ -103,11 +103,11 @@ public struct VectorscopeView: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Vectorscope").font(.caption).foregroundStyle(.secondary)
+            SectionLabel("Vectorscope")
             Canvas { ctx, size in
                 let side = min(size.width, size.height)
                 let rect = CGRect(x: (size.width - side) / 2, y: (size.height - side) / 2, width: side, height: side)
-                ctx.fill(Path(ellipseIn: rect), with: .color(.gray.opacity(0.1)))
+                ctx.fill(Path(ellipseIn: rect), with: .color(Theme.panel))
                 var axes = Path()
                 axes.move(to: CGPoint(x: rect.midX, y: rect.minY)); axes.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
                 axes.move(to: CGPoint(x: rect.minX, y: rect.midY)); axes.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
@@ -116,9 +116,9 @@ public struct VectorscopeView: View {
                 let d = r / 2.0.squareRoot()
                 axes.move(to: CGPoint(x: rect.midX - d, y: rect.midY - d)); axes.addLine(to: CGPoint(x: rect.midX + d, y: rect.midY + d))
                 axes.move(to: CGPoint(x: rect.midX + d, y: rect.midY - d)); axes.addLine(to: CGPoint(x: rect.midX - d, y: rect.midY + d))
-                ctx.stroke(axes, with: .color(.white.opacity(0.12)), lineWidth: 0.5)
-                ctx.draw(Text("L").font(.system(size: 9)).foregroundStyle(.secondary), at: CGPoint(x: rect.midX - d - 6, y: rect.midY - d - 6))
-                ctx.draw(Text("R").font(.system(size: 9)).foregroundStyle(.secondary), at: CGPoint(x: rect.midX + d + 6, y: rect.midY - d - 6))
+                ctx.stroke(axes, with: .color(Theme.grid.opacity(0.8)), lineWidth: 0.5)
+                ctx.draw(Text("L").font(.system(size: 9)).foregroundStyle(Theme.textSecondary), at: CGPoint(x: rect.midX - d - 6, y: rect.midY - d - 6))
+                ctx.draw(Text("R").font(.system(size: 9)).foregroundStyle(Theme.textSecondary), at: CGPoint(x: rect.midX + d + 6, y: rect.midY - d - 6))
 
                 let n = min(left.count, right.count)
                 guard n > 1 else { return }
@@ -131,7 +131,7 @@ public struct VectorscopeView: View {
                     let y = rect.midY - k * (l + rr)   // mid: up
                     dots.addRect(CGRect(x: x - 0.6, y: y - 0.6, width: 1.2, height: 1.2))
                 }
-                ctx.fill(dots, with: .color(.green.opacity(0.7)))
+                ctx.fill(dots, with: .color(Theme.signal.opacity(0.75)))
             }
             .aspectRatio(1, contentMode: .fit)
             CorrelationBar(value: correlation).frame(height: 18)
@@ -161,7 +161,7 @@ public struct WaterfallView: View {
         let ticks = stride(from: 0.0, through: span, by: step).map { (value: -$0, label: $0 == 0 ? "now" : String(format: "-%.0f s", $0)) }
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text("Waterfall (dBFS)").font(.caption).foregroundStyle(.secondary)
+                SectionLabel("Waterfall (dBFS)")
                 Spacer()
                 ColorScaleBar(range: range).frame(width: 220, height: 12)
             }
@@ -199,9 +199,10 @@ public struct WaterfallView: View {
     }
 }
 
-/// Black, blue, magenta, orange, yellow, white from the bottom of the range to the top.
+/// Navy, deep violet, violet-blue, cyan, white from the bottom of the range to the top
+/// (the app icon's ramp, rising in lightness).
 func heatColor(_ db: Double, range: ClosedRange<Double>) -> (UInt8, UInt8, UInt8) {
-    let stops: [(Double, Double, Double)] = [(0, 0, 0), (0.05, 0.1, 0.45), (0.6, 0.1, 0.6), (1, 0.5, 0.05), (1, 0.9, 0.2), (1, 1, 1)]
+    let stops: [(Double, Double, Double)] = [(0.04, 0.05, 0.09), (0.06, 0.06, 0.16), (0.2, 0.09, 0.42), (0.38, 0.3, 0.95), (0.25, 0.85, 1), (0.95, 0.99, 1)]
     let t = min(max((db - range.lowerBound) / (range.upperBound - range.lowerBound), 0), 1) * Double(stops.count - 1)
     let i = min(Int(t), stops.count - 2), f = t - Double(i)
     let a = stops[i], b = stops[i + 1]
@@ -213,7 +214,7 @@ private struct ColorScaleBar: View {
     let range: ClosedRange<Double>
     var body: some View {
         HStack(spacing: 4) {
-            Text(String(format: "%.0f", range.lowerBound)).font(.system(size: 9).monospacedDigit()).foregroundStyle(.secondary)
+            Text(String(format: "%.0f", range.lowerBound)).font(Theme.axis).foregroundStyle(Theme.textSecondary)
             Canvas { ctx, size in
                 let steps = 64
                 for s in 0..<steps {
@@ -224,7 +225,7 @@ private struct ColorScaleBar: View {
                              with: .color(Color(red: Double(r) / 255, green: Double(g) / 255, blue: Double(b) / 255)))
                 }
             }
-            Text(String(format: "%.0f", range.upperBound)).font(.system(size: 9).monospacedDigit()).foregroundStyle(.secondary)
+            Text(String(format: "%.0f", range.upperBound)).font(Theme.axis).foregroundStyle(Theme.textSecondary)
         }
     }
 }
@@ -251,21 +252,21 @@ struct HistoryStrip: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
-                Text(title).font(.caption).foregroundStyle(.secondary)
+                SectionLabel(title)
                 Spacer()
-                Text(readout).font(.caption.monospacedDigit())
+                Text(readout).font(Theme.readout(10))
             }
             GeometryReader { geo in
                 let w = geo.size.width - leftGutter, h = geo.size.height
                 let y = { (v: Double) in h * (range.upperBound - min(max(v, range.lowerBound), range.upperBound)) / (range.upperBound - range.lowerBound) }
                 ZStack(alignment: .topLeading) {
                     Canvas { ctx, size in
-                        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.gray.opacity(0.1)))
+                        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Theme.panel))
                         var grid = Path()
                         for t in ticks {
                             grid.move(to: CGPoint(x: 0, y: y(t.value))); grid.addLine(to: CGPoint(x: size.width, y: y(t.value)))
                         }
-                        ctx.stroke(grid, with: .color(.white.opacity(0.12)), lineWidth: 0.5)
+                        ctx.stroke(grid, with: .color(Theme.grid.opacity(0.8)), lineWidth: 0.5)
                         let dx = size.width / Double(max(capacity - 1, 1))
                         for (s, line) in series.enumerated() where line.values.count > 1 {
                             let x0 = size.width - dx * Double(line.values.count - 1)
@@ -288,8 +289,8 @@ struct HistoryStrip: View {
                     .offset(x: leftGutter)
                     ForEach(Array(ticks.enumerated()), id: \.offset) { _, t in
                         Text(t.label)
-                            .font(.system(size: 9).monospacedDigit())
-                            .foregroundStyle(.secondary)
+                            .font(Theme.axis)
+                            .foregroundStyle(Theme.textSecondary)
                             .frame(width: leftGutter - 4, alignment: .trailing)
                             .position(x: (leftGutter - 4) / 2, y: min(max(y(t.value), 5), h - 5))
                     }
@@ -312,10 +313,10 @@ public struct HistoriesView: View {
     public var body: some View {
         let power = snapshot.powerHistory
         VStack(spacing: 8) {
-            HistoryStrip(title: "Correlation", series: [.init(values: snapshot.correlationHistory, color: .green)],
+            HistoryStrip(title: "Correlation", series: [.init(values: snapshot.correlationHistory, color: Theme.signal)],
                          range: -1...1, ticks: [(1, "+1"), (0, "0"), (-1, "-1")], capacity: capacity,
                          readout: String(format: "%+.2f", snapshot.correlation), filled: true)
-            HistoryStrip(title: "Balance (+ is left)", series: [.init(values: snapshot.balanceHistory, color: .cyan)],
+            HistoryStrip(title: "Balance (+ is left)", series: [.init(values: snapshot.balanceHistory, color: Theme.signal2)],
                          range: -1...1, ticks: [(1, "L"), (0, "0"), (-1, "R")], capacity: capacity,
                          readout: String(format: "%+.2f", snapshot.balance), filled: true)
             HistoryStrip(title: "Power, peak and RMS (dBFS)",

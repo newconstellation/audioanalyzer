@@ -33,7 +33,7 @@ public struct InputsView: View {
         VStack(alignment: .leading, spacing: 12) {
             if let devices {
                 HStack(spacing: 6) {
-                    Text("Input device").foregroundStyle(.secondary)
+                    Text("Input device").foregroundStyle(Theme.textSecondary)
                     ViewThatFits(in: .horizontal) {
                         deviceChips(devices)
                         ScrollView(.horizontal, showsIndicators: false) { deviceChips(devices) }
@@ -46,7 +46,7 @@ public struct InputsView: View {
                     Group {
                         Text("Input"); Text("Level"); Text("Spectrum"); Text("TF reference"); Text("TF mic"); Text("Calibration")
                     }
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(Theme.small).foregroundStyle(Theme.textSecondary)
                 }
                 ForEach(0..<channelCount, id: \.self) { c in
                     GridRow {
@@ -63,11 +63,11 @@ public struct InputsView: View {
                             guard c != routing.reference else { return }
                             toggle(&routing.measurementChannels, c)
                         }
-                        Text(offsetText(c)).monospacedDigit().foregroundStyle(.secondary)
+                        Text(offsetText(c)).monospacedDigit().foregroundStyle(Theme.textSecondary)
                     }
                 }
             }
-            .font(.system(size: 11))
+            .font(Theme.small)
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 6) {
@@ -90,12 +90,11 @@ public struct InputsView: View {
                 reverberant or noisy points) count for less. Normalised power lines mics up in level over a mid band \
                 first (125 Hz–4 kHz for the spectrum, 225 Hz–8.8 kHz for transfer functions).
                 """)
-                .font(.caption).foregroundStyle(.secondary)
+                .font(Theme.small).foregroundStyle(Theme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             }
-            .font(.system(size: 11))
-            .padding(10)
-            .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.05)))
+            .font(Theme.small)
+            .panel()
             Spacer()
         }
     }
@@ -125,10 +124,10 @@ private struct LevelStrip: View {
     let db: Double
     var body: some View {
         Canvas { ctx, size in
-            ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.white.opacity(0.1)))
+            ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Theme.grid.opacity(0.8)))
             let f = min(max((db + 60) / 60, 0), 1)
             ctx.fill(Path(CGRect(x: 0, y: 0, width: size.width * f, height: size.height)),
-                     with: .color(db > -3 ? .red : db > -12 ? .yellow : .green))
+                     with: .color(Theme.level(db)))
         }
     }
 }

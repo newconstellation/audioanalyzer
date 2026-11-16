@@ -26,6 +26,15 @@ jobs:
             base64 -b 76 -i "$f"
             echo "SNAPSHOT-END"
           done
+      - name: Print compact snapshot previews
+        # One JPEG per log line, so the whole set fits in the end of the log.
+        run: |
+          mkdir -p previews
+          for f in snapshots/*.png; do
+            out="previews/$(basename "${f%.png}").jpg"
+            sips -s format jpeg -s formatOptions 70 -Z 1400 "$f" --out "$out" >/dev/null
+            echo "PREVIEW $(basename "$out") $(base64 -i "$out" | tr -d '\n')"
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: ui-snapshots

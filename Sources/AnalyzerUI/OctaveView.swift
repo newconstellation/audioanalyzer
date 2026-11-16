@@ -22,20 +22,14 @@ public struct OctaveView: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 4) {
-                Text("Bands").font(.caption).foregroundStyle(.secondary).padding(.trailing, 4)
+                SectionLabel("Bands").padding(.trailing, 4)
                 ForEach(OctaveFraction.allCases, id: \.self) { f in
-                    Button { fraction = f } label: {
-                        Text(f.label).font(.system(size: 11))
-                            .padding(.horizontal, 8).padding(.vertical, 3)
-                            .background(RoundedRectangle(cornerRadius: 4)
-                                .fill(fraction == f ? Color.accentColor.opacity(0.8) : Color.white.opacity(0.08)))
-                    }
-                    .buttonStyle(.plain)
+                    Chip(title: f.label, selected: fraction == f) { fraction = f }
                 }
                 Spacer()
-                Text("dBFS (sine = its level)").font(.caption).foregroundStyle(.secondary)
+                SectionLabel("dBFS (sine = its level)")
             }
-            FrequencyPlot(yTicks: Self.ticks, yRange: Self.range) { x, y in
+            FrequencyPlot(yTicks: Self.ticks, yRange: Self.range, title: fraction.label + " bands") { x, y in
                 Canvas { ctx, size in
                     let n = min(bands.count, levelsDB.count)
                     guard n > 0 else { return }
@@ -51,16 +45,16 @@ public struct OctaveView: View {
                             holds.addRect(CGRect(x: x0 + gap, y: py - 1, width: max(0.5, x1 - x0 - 2 * gap), height: 2))
                         }
                     }
-                    ctx.fill(bars, with: .linearGradient(Gradient(colors: [.yellow, .green, .green.opacity(0.7)]),
-                                                         startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
-                    ctx.fill(holds, with: .color(.white.opacity(0.8)))
+                    // Each band in its frequency colour: cyan lows to violet highs.
+                    ctx.fill(bars, with: Theme.frequencyShading(width: size.width))
+                    ctx.fill(holds, with: .color(Theme.text.opacity(0.9)))
                     // Band values under the bars when there's room.
                     if n <= 31 {
                         for i in 0..<n {
                             let b = bands[i]
                             let cx = (x(b.lower, size.width) + x(b.upper, size.width)) / 2
                             let top = y(levelsDB[i], size.height)
-                            ctx.draw(Text(String(format: "%.0f", levelsDB[i])).font(.system(size: 8).monospacedDigit()),
+                            ctx.draw(Text(String(format: "%.0f", levelsDB[i])).font(Theme.axis),
                                      at: CGPoint(x: cx, y: max(6, top - 7)))
                         }
                     }
@@ -73,8 +67,8 @@ public struct OctaveView: View {
                     let every = bands.count > 12 ? 3 : 1
                     ForEach(Array(bands.enumerated()).filter { $0.offset % every == 0 }, id: \.offset) { _, b in
                         Text(frequencyLabel(b.nominal))
-                            .font(.system(size: 9).monospacedDigit())
-                            .foregroundStyle(.secondary)
+                            .font(Theme.axis)
+                            .foregroundStyle(Theme.textSecondary)
                             .position(x: 40 + LogFrequencyScale().x(b.center, width: w), y: 6)
                     }
                 }

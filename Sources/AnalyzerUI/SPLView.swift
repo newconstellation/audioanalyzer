@@ -60,11 +60,11 @@ public struct SPLView: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
-                Text("Input").foregroundStyle(.secondary)
+                Text("Input").foregroundStyle(Theme.textSecondary)
                 ForEach(0..<max(snapshot.soundLevels.count, 1), id: \.self) { c in
                     Chip(title: "\(c + 1)", selected: c == channel) { controls.channel.wrappedValue = c }
                 }
-                Text("Leq period").foregroundStyle(.secondary).padding(.leading, 12)
+                Text("Leq period").foregroundStyle(Theme.textSecondary).padding(.leading, 12)
                 ForEach(Self.periods.indices, id: \.self) { i in
                     let p = Self.periods[i]
                     Chip(title: p.1, selected: controls.leqPeriodSeconds.wrappedValue == p.0) {
@@ -73,18 +73,18 @@ public struct SPLView: View {
                 }
                 Spacer()
                 if offset == nil {
-                    Text("Uncalibrated").font(.caption.bold()).foregroundStyle(.orange)
+                    Text("Uncalibrated").font(Theme.label).foregroundStyle(Theme.warning)
                 }
                 PlainButton(title: "Reset Leq & max", action: controls.reset)
             }
-            .font(.system(size: 11))
+            .font(Theme.small)
 
             if channel < snapshot.soundLevels.count {
                 readouts(snapshot.soundLevels[channel])
             }
 
-            Text("History, last 10 minutes (\(unit)): LAS green, LCS orange, LAeq \(periodLabel) white")
-                .font(.caption).foregroundStyle(.secondary)
+            Text("History, last 10 minutes (\(unit)): LAS cyan, LCS violet, LAeq \(periodLabel) white")
+                .font(Theme.small).foregroundStyle(Theme.textSecondary)
             SPLHistoryPlot(points: snapshot.splHistory, offset: offset ?? 0, calibrated: offset != nil,
                            step: snapshot.splHistoryStep)
                 .frame(minHeight: 160, maxHeight: .infinity)
@@ -100,13 +100,13 @@ public struct SPLView: View {
     private func readouts(_ r: ChannelSoundLevel) -> some View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("LAeq \(periodLabel)").font(.caption).foregroundStyle(.secondary)
-                Text(level(r.a.periodLeq)).font(.system(size: 40, weight: .semibold).monospacedDigit())
-                Text(unit).font(.caption).foregroundStyle(.secondary)
+                SectionLabel("LAeq \(periodLabel)")
+                Text(level(r.a.periodLeq)).font(Theme.readout(40, weight: .medium)).foregroundStyle(Theme.signal)
+                    .lineLimit(1).minimumScaleFactor(0.6)
+                Text(unit).font(Theme.small).foregroundStyle(Theme.textSecondary)
             }
-            .padding(10)
-            .frame(width: 170, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.08)))
+            .frame(width: 160, alignment: .leading)
+            .panel()
             Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 8) {
                 GridRow {
                     Readout(title: "LAS (slow)", value: level(r.a.slow), detail: unit)
@@ -129,9 +129,9 @@ public struct SPLView: View {
     private var calibrationPanel: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Text("Calibration, input \(channel + 1)").font(.headline)
+                Text("Calibration, input \(channel + 1)").font(.system(size: 13, weight: .semibold))
                 Text(offset.map { String(format: "offset %+.1f dB", $0) } ?? "no offset").monospacedDigit()
-                    .foregroundStyle(offset == nil ? Color.orange : Color.secondary)
+                    .foregroundStyle(offset == nil ? Theme.warning : Theme.textSecondary)
                 ForEach([-1.0, -0.1, 0.1, 1], id: \.self) { d in
                     Chip(title: String(format: "%+g", d), selected: false) { nudgeOffset(d) }
                 }
@@ -141,7 +141,7 @@ public struct SPLView: View {
                 Spacer()
             }
             HStack(spacing: 6) {
-                Text("Calibrator").foregroundStyle(.secondary)
+                Text("Calibrator").foregroundStyle(Theme.textSecondary)
                 ForEach([94.0, 110, 114], id: \.self) { l in
                     Chip(title: "\(Int(l)) dB", selected: controls.calibratorLevel.wrappedValue == l) {
                         controls.calibratorLevel.wrappedValue = l
@@ -152,21 +152,20 @@ public struct SPLView: View {
                 } else {
                     PlainButton(title: "Calibrate", action: controls.startCalibration)
                     Text("Fit the calibrator to the mic on input \(channel + 1), switch it on, then press Calibrate.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(Theme.small).foregroundStyle(Theme.textSecondary)
                 }
                 Spacer()
             }
         }
-        .font(.system(size: 11))
-        .padding(10)
-        .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.05)))
+        .font(Theme.small)
+        .panel()
     }
 
     @ViewBuilder
     private func calibrationProgress(_ cal: CalibrationStatus) -> some View {
         if cal.progress < 1 {
             ProgressBar(value: cal.progress).frame(width: 160, height: 8)
-            Text("Measuring input \(cal.channel + 1)…").foregroundStyle(.secondary)
+            Text("Measuring input \(cal.channel + 1)…").foregroundStyle(Theme.textSecondary)
             PlainButton(title: "Cancel", action: controls.cancelCalibration)
         } else if let o = cal.offset {
             Text(String(format: "Measured %.1f dB re FS; offset %+.1f dB makes it read %.1f dB SPL.",
@@ -174,7 +173,7 @@ public struct SPLView: View {
             PlainButton(title: "Apply", action: controls.applyCalibration)
             PlainButton(title: "Cancel", action: controls.cancelCalibration)
         } else {
-            Text("Too quiet to be a calibrator. Is it on, and is the input gain up?").foregroundStyle(.orange)
+            Text("Too quiet to be a calibrator. Is it on, and is the input gain up?").foregroundStyle(Theme.warning)
             PlainButton(title: "Cancel", action: controls.cancelCalibration)
         }
     }
@@ -198,12 +197,10 @@ struct Chip: View {
     let action: () -> Void
     var body: some View {
         Button(action: action) {
-            Text(title)
-                .padding(.horizontal, 7).padding(.vertical, 3)
-                .background(RoundedRectangle(cornerRadius: 4)
-                    .fill(selected ? Color.accentColor.opacity(0.8) : Color.white.opacity(0.1)))
+            Text(title).font(Theme.small.weight(selected ? .semibold : .regular))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(RaisedButtonStyle(selected: selected))
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
@@ -212,9 +209,10 @@ struct ProgressBar: View {
     var body: some View {
         Canvas { ctx, size in
             ctx.fill(Path(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: size.height / 2),
-                     with: .color(.white.opacity(0.12)))
+                     with: .color(Theme.well))
             ctx.fill(Path(roundedRect: CGRect(x: 0, y: 0, width: size.width * min(max(value, 0), 1), height: size.height),
-                          cornerRadius: size.height / 2), with: .color(.accentColor))
+                          cornerRadius: size.height / 2),
+                     with: .linearGradient(Theme.rampGradient, startPoint: .zero, endPoint: CGPoint(x: size.width, y: 0)))
         }
     }
 }
@@ -230,9 +228,9 @@ struct SPLHistoryPlot: View {
     var body: some View {
         let range: ClosedRange<Double> = calibrated ? 30...130 : -100...0
         HistoryStrip(title: "", series: [
-            .init(values: points.map { $0.lcSlow + offset }, color: .orange),
-            .init(values: points.map { $0.laSlow + offset }, color: .green),
-            .init(values: points.map { $0.laeq + offset }, color: .white),
+            .init(values: points.map { $0.lcSlow + offset }, color: Theme.signal2),
+            .init(values: points.map { $0.laSlow + offset }, color: Theme.signal),
+            .init(values: points.map { $0.laeq + offset }, color: Theme.text),
         ], range: range, ticks: stride(from: range.upperBound, through: range.lowerBound, by: -20).map { (value: $0, label: "\(Int($0))") },
            capacity: capacity,
            readout: points.isEmpty ? "" : String(format: "%.0f s", Double(points.count) * step))
